@@ -1,0 +1,679 @@
+# Raspberry Pi Zero W GrowMate Pods - Implementation Plan
+
+## Overview
+Port of ESP32-CAM GrowMate firmware to Raspberry Pi Zero W. IoT plant monitoring system with sensors, camera, cloud API integration, and actuator control.
+
+## Target Features
+
+### 1. Sensor Monitoring
+- Read 3 analog sensors via ADS1115 ADC (I2C):
+  - Soil moisture sensor (A0)
+  - Light level sensor (A1)
+  - Water level sensor (A2)
+- Read DHT22 digital sensor (GPIO):
+  - Temperature
+  - Humidity
+- Apply calibration to convert raw ADC values to meaningful ranges
+- Configurable reading intervals (default: 15 seconds)
+- Dynamic payload building (only include available sensors)
+
+### 2. Camera System
+- Capture images with Pi Camera Module v1 (5MP)
+- JPEG compression
+- Configurable capture intervals (default: 15 minutes)
+- Memory-efficient image handling
+- Upload images to cloud API
+
+### 3. Cloud API Integration
+- HTTPS communication with cloud backend
+- Upload sensor data as JSON payload
+- Upload captured images
+- Receive and parse commands from server
+- Retry logic with exponential backoff on failures
+- Error handling and recovery
+
+### 4. Actuator Control
+- Water pump control via GPIO relay:
+  - Timed operation (duration-based)
+  - Cloud-commanded activation
+  - Automatic shutoff
+- Grow light control via GPIO relay:
+  - On/off control
+  - Cloud-commanded operation
+- Status reporting back to cloud
+
+### 5. WiFi Management & Onboarding
+- AP mode for initial setup:
+  - SSID: "GrowMate-XXXXXX" (MAC-based)
+  - IP: 192.168.4.1
+  - DHCP server for client devices
+- Web-based configuration portal:
+  - WiFi network scanning and selection
+  - WiFi password input
+  - Device ID configuration
+  - API URL configuration
+  - Sensor calibration values
+- Automatic switch from AP mode to client mode
+- Fallback to AP mode on repeated connection failures
+- Network status monitoring
+
+### 6. Configuration Management
+- YAML configuration file (`/etc/growmate/config.yaml`)
+- Persistent storage of:
+  - Device identity
+  - WiFi credentials
+  - API endpoint URL
+  - Sensor reading intervals
+  - Camera capture intervals
+  - Sensor calibration values
+  - Feature flags (e.g., enable_dht22)
+- Configuration validation and sanitization
+- Web-based configuration updates
+
+### 7. System Services & Reliability
+- Systemd service integration:
+  - Auto-start on boot
+  - Auto-restart on failure
+  - Proper dependency management
+- Comprehensive logging to systemd journal
+- Graceful shutdown handling
+- Error recovery mechanisms
+- Consecutive failure tracking
+
+### 8. Installation & Deployment
+- One-command installation script
+- Automated dependency installation
+- System configuration (I2C, camera, hostapd, dnsmasq)
+- GitHub repository integration
+- Hardware testing utilities
+- Comprehensive documentation
+
+## Hardware Requirements
+
+| Component | Spec | Cost | Notes |
+|-----------|------|------|-------|
+| Raspberry Pi Zero W | BCM2835, 512MB RAM, WiFi | $15 | Main controller |
+| Pi Camera Module v1 | 5MP | $15 | CSI interface |
+| ADS1115 ADC | 16-bit, 4-channel, I2C | $5 | **Required - Pi has no ADC** |
+| DHT22 | Temp/humidity sensor | $5 | Digital (GPIO) |
+| Soil moisture sensor | Analog | $3 | Via ADS1115 A0 |
+| Light sensor | Photoresistor | $2 | Via ADS1115 A1 |
+| Water level sensor | Analog | $3 | Via ADS1115 A2 |
+| 2-channel relay | 5V | $5 | Pump + light control |
+| MicroSD card | 16GB+ | $8 | OS + storage |
+| Power supply | 5V 2.5A | $8 | Adequate current |
+| **Total** | | **$69** | vs ESP32 ~$40 |
+
+## Pin Assignment
+
+```
+GPIO 2/3   - I2C (SDA/SCL) for ADS1115
+GPIO 4     - DHT22 sensor
+GPIO 17    - Water pump relay
+GPIO 27    - Grow light relay
+CSI port   - Pi Camera Module v1
+```
+
+## Technology Stack
+
+**Confirmed Decisions:**
+1. ✅ WiFi: AP mode onboarding → Client mode (matches ESP32)
+2. ✅ Camera: Pi Camera v1 (5MP, $15)
+3. ✅ Deployment: Automated install script + private GitHub repo
+4. ✅ Config: YAML format
+5. ✅ Logging: Systemd journal
+
+**Core Technologies:**
+- Language: Python 3
+- Framework: Systemd service
+- Web Portal: Flask (onboarding)
+- ADC: ADS1115 via I2C
+- Camera: picamera2 library
+
+## Architecture
+
+### WiFi Onboarding Flow
+```
+First Boot → AP Mode (GrowMate-XXXXXX @ 192.168.4.1)
+          → Flask web portal for configuration
+          → Save to /etc/growmate/config.yaml
+          → Switch to Client Mode
+          → Normal operation
+```
+
+### Main Application Loop
+```
+Systemd Service (auto-start, auto-restart)
+  ├─ Every 15s: Read sensors → Upload to API → Process commands
+  ├─ Every 15m: Capture image → Upload to API
+  └─ Command handling: Pump control, Light control
+```
+
+## Project Structure
+
+```
+rpi-growmate-pods/
+├── src/
+│   ├── main.py                      # Main loop
+│   ├── config_manager.py            # YAML config
+│   ├── sensors.py                   # ADS1115 + DHT22
+│   ├── camera_service.py            # Pi Camera v1
+│   ├── actuators.py                 # GPIO control
+│   ├── api_client.py                # HTTPS API
+│   ├── network_manager.py           # AP/Client switching
+│   ├── onboarding_portal.py         # Flask web UI
+│   └── utils.py                     # Logging, retry
+├── templates/
+│   ├── index.html                   # Onboarding UI
+│   └── success.html
+├── static/
+│   └── style.css
+├── config/
+│   ├── hostapd.conf.template        # AP mode config
+│   ├── dnsmasq.conf.template        # DHCP config
+│   └── config.yaml.example
+├── systemd/
+│   ├── growmate.service
+│   └── growmate-onboarding.service
+├── scripts/
+│   ├── install.sh                   # Main installer
+│   ├── setup_ap.sh
+│   ├── switch_to_client.sh
+│   └── test_hardware.py
+├── requirements.txt
+├── PLAN.md
+└── README.md
+```
+
+## Configuration Format (YAML)
+
+```yaml
+device:
+  id: "growmate-001"
+network:
+  wifi_ssid: "YourNetwork"
+  wifi_password: "YourPassword"
+api:
+  url: "https://api.growmate.example.com"
+intervals:
+  sensor_reading: 15      # seconds
+  camera_capture: 900     # seconds
+calibration:
+  soil_moisture: {min: 0, max: 65535}
+  light: {min: 0, max: 65535}
+  water_level: {min: 0, max: 65535}
+sensors:
+  enable_dht22: true
+```
+
+## Dependencies
+
+**Python:**
+```
+picamera2>=0.3.12
+gpiozero>=1.6.2
+adafruit-circuitpython-ads1x15>=2.2.21
+adafruit-circuitpython-dht>=3.7.9
+requests>=2.28.0
+flask>=2.3.0
+pyyaml>=6.0
+python-daemon>=2.3.0
+```
+
+**System:**
+```
+python3-pip, python3-dev, i2c-tools, libgpiod2
+libcamera-apps, hostapd, dnsmasq
+```
+
+## Implementation Phases
+
+### Phase 1: Repository & Environment Setup
+**Goal:** Establish project foundation and prepare Raspberry Pi Zero W development environment
+
+**Time Estimate:** 2-3 hours
+
+**Deliverables:**
+- Private GitHub repository with project structure
+- Raspberry Pi Zero W with OS installed and configured
+- All system dependencies installed
+- I2C and Camera interfaces enabled
+- Python virtual environment with dependencies
+
+**Tasks:**
+1. Create private GitHub repository
+2. Initialize project structure (src/, templates/, static/, config/, systemd/, scripts/)
+3. Create requirements.txt with Python dependencies
+4. Install Raspberry Pi OS Lite on microSD card
+5. Configure headless setup (SSH, WiFi for initial access)
+6. Update system: `apt update && apt upgrade`
+7. Install system packages: python3-pip, i2c-tools, libgpiod2, libcamera-apps
+8. Enable I2C interface via `raspi-config`
+9. Enable Camera interface via `raspi-config`
+10. Install Python dependencies from requirements.txt
+11. Create initial README.md and PLAN.md
+12. Commit and push initial structure
+
+**Success Criteria:**
+- ✅ GitHub repository accessible
+- ✅ Can SSH into Pi Zero W
+- ✅ `i2cdetect -y 1` shows I2C bus
+- ✅ `libcamera-hello` shows camera preview
+- ✅ All Python libraries import without errors
+- ✅ Project structure matches plan
+
+---
+
+### Phase 2: Hardware Integration & Testing
+**Goal:** Verify all hardware components function correctly in isolation
+
+**Time Estimate:** 2-3 hours
+
+**Deliverables:**
+- Fully wired hardware setup
+- Hardware testing script (`test_hardware.py`)
+- Wiring diagram documentation
+- Validation results for all components
+
+**Tasks:**
+1. Wire ADS1115 to I2C pins (GPIO 2/3, VCC, GND)
+2. Connect 3 analog sensors to ADS1115 (A0, A1, A2)
+3. Wire DHT22 to GPIO 4 with pull-up resistor
+4. Connect Pi Camera Module v1 to CSI port
+5. Wire 2-channel relay module to GPIO 17 and 27
+6. Create `test_hardware.py` script:
+   - Test ADS1115 I2C communication
+   - Read all 3 analog sensor channels
+   - Read DHT22 temperature and humidity
+   - Capture test image with camera
+   - Toggle GPIO outputs (pump, light)
+7. Run tests and document results
+8. Create wiring diagram (text or image)
+9. Troubleshoot any hardware issues
+
+**Success Criteria:**
+- ✅ ADS1115 detected on I2C bus (address 0x48)
+- ✅ All 3 analog sensors return valid readings
+- ✅ DHT22 returns temperature and humidity values
+- ✅ Camera captures and saves JPEG image
+- ✅ GPIO outputs can be toggled (LED/multimeter test)
+- ✅ No hardware errors in test script
+
+---
+
+### Phase 3: Core Module Development
+**Goal:** Build and test individual software components independently
+
+**Time Estimate:** 4-6 hours
+
+**Deliverables:**
+- `config_manager.py` - YAML configuration handling
+- `sensors.py` - Sensor reading with calibration
+- `camera_service.py` - Camera capture and image handling
+- `actuators.py` - GPIO actuator control
+- `api_client.py` - HTTPS API communication
+- `utils.py` - Logging and helper functions
+- Unit tests or test scripts for each module
+
+**Tasks:**
+1. **config_manager.py:**
+   - YAML file read/write functions
+   - Configuration validation
+   - Default configuration generation
+   - Schema validation for required fields
+2. **sensors.py:**
+   - ADS1115 initialization and reading
+   - DHT22 reading with error handling
+   - Calibration application (raw → percentage)
+   - Sensor data structure/dictionary
+3. **camera_service.py:**
+   - Pi Camera initialization
+   - Image capture function
+   - JPEG encoding and compression
+   - Memory management
+   - Camera cleanup/deinitialization
+4. **actuators.py:**
+   - GPIO initialization (gpiozero)
+   - Pump control with duration timer
+   - Light control (on/off)
+   - Status reporting
+5. **api_client.py:**
+   - HTTPS POST for sensor data (JSON)
+   - HTTPS POST for image upload (multipart)
+   - Command parsing from API response
+   - Retry logic with exponential backoff
+   - Error handling
+6. **utils.py:**
+   - Logging setup (systemd journal)
+   - Retry decorator
+   - Helper functions
+
+**Success Criteria:**
+- ✅ Each module can be imported without errors
+- ✅ config_manager reads/writes YAML correctly
+- ✅ sensors module returns valid sensor data
+- ✅ camera_service captures and saves images
+- ✅ actuators can control GPIO outputs
+- ✅ api_client can make HTTPS requests (test endpoint)
+- ✅ All modules have error handling
+
+---
+
+### Phase 4: Network & Onboarding System
+**Goal:** Implement WiFi AP mode and web-based configuration portal
+
+**Time Estimate:** 6-8 hours (most complex phase)
+
+**Deliverables:**
+- `network_manager.py` - AP/Client mode switching
+- `onboarding_portal.py` - Flask web application
+- HTML templates (index.html, success.html)
+- CSS styling (style.css)
+- hostapd configuration template
+- dnsmasq configuration template
+- Network switching scripts
+
+**Tasks:**
+1. **hostapd setup:**
+   - Create hostapd.conf.template
+   - Configure AP mode (SSID: GrowMate-XXXXXX, channel, etc.)
+   - Test hostapd standalone
+2. **dnsmasq setup:**
+   - Create dnsmasq.conf.template
+   - Configure DHCP range (192.168.4.2-192.168.4.20)
+   - Configure DNS (redirect all to 192.168.4.1)
+3. **network_manager.py:**
+   - Function to start AP mode (hostapd + dnsmasq)
+   - Function to stop AP mode
+   - Function to start client mode (wpa_supplicant)
+   - Function to scan WiFi networks
+   - Network status checking
+   - Interface management (wlan0)
+4. **onboarding_portal.py (Flask app):**
+   - Route: GET / - Show configuration form
+   - Route: GET /scan - Return available WiFi networks (JSON)
+   - Route: POST /configure - Save configuration and switch to client mode
+   - Form fields: WiFi SSID, password, device ID, API URL, calibration
+   - Input validation
+   - Configuration saving via config_manager
+5. **HTML templates:**
+   - index.html - Configuration form with WiFi scanning
+   - success.html - Configuration saved confirmation
+   - Responsive design for mobile devices
+6. **CSS styling:**
+   - Clean, simple interface
+   - Mobile-friendly
+7. **Integration:**
+   - Detect if configuration exists on boot
+   - Start AP mode if no config or connection failures
+   - Start client mode if config exists
+8. **Testing:**
+   - Test AP mode creation
+   - Test web portal access
+   - Test WiFi scanning
+   - Test configuration save
+   - Test switch to client mode
+
+**Success Criteria:**
+- ✅ Pi creates AP "GrowMate-XXXXXX" on demand
+- ✅ Can connect to AP from phone/laptop
+- ✅ Web portal accessible at http://192.168.4.1
+- ✅ WiFi scanning returns available networks
+- ✅ Configuration form saves to config.yaml
+- ✅ System switches to client mode after configuration
+- ✅ Can connect to configured WiFi network
+- ✅ Fallback to AP mode on connection failures
+
+---
+
+### Phase 5: Main Application Integration
+**Goal:** Orchestrate all components into a complete monitoring system
+
+**Time Estimate:** 3-4 hours
+
+**Deliverables:**
+- `main.py` - Main application with monitoring loop
+- Integrated error handling and recovery
+- Comprehensive logging
+- Graceful shutdown handling
+
+**Tasks:**
+1. **main.py structure:**
+   - Load configuration on startup
+   - Initialize all hardware (sensors, camera, actuators)
+   - Check network connectivity
+   - Main monitoring loop with timing
+2. **Sensor reading cycle (every 15 seconds):**
+   - Read all sensors via sensors.py
+   - Upload data via api_client.py
+   - Parse commands from API response
+   - Execute actuator commands
+   - Handle errors with retry logic
+3. **Camera capture cycle (every 15 minutes):**
+   - Capture image via camera_service.py
+   - Upload image via api_client.py
+   - Handle errors with retry logic
+4. **Command processing:**
+   - Parse pump commands (duration)
+   - Parse light commands (on/off)
+   - Execute via actuators.py
+   - Report status back to API
+5. **Error handling:**
+   - Sensor read failures (continue with available sensors)
+   - Camera failures (log and continue)
+   - API upload failures (retry with backoff)
+   - Network failures (track consecutive failures)
+6. **Failure recovery:**
+   - Track consecutive API failures
+   - Trigger AP mode after threshold (e.g., 5 failures)
+   - Reset failure counter on success
+7. **Logging:**
+   - Log all operations to systemd journal
+   - Log levels: INFO, WARNING, ERROR
+   - Structured logging with context
+8. **Graceful shutdown:**
+   - Handle SIGTERM/SIGINT
+   - Clean up GPIO
+   - Close camera
+   - Save state if needed
+
+**Success Criteria:**
+- ✅ Application starts and loads configuration
+- ✅ Sensor readings occur every 15 seconds
+- ✅ Camera captures occur every 15 minutes
+- ✅ Data uploads to API successfully
+- ✅ Commands from API are executed
+- ✅ Errors are handled gracefully (no crashes)
+- ✅ Logs are written to systemd journal
+- ✅ Application shuts down cleanly on SIGTERM
+- ✅ Can run for extended period without issues
+
+---
+
+### Phase 6: Service Deployment
+**Goal:** Deploy application as production systemd service with automated installation
+
+**Time Estimate:** 2-3 hours
+
+**Deliverables:**
+- `growmate.service` - Main application systemd service
+- `growmate-onboarding.service` - Onboarding portal service (optional)
+- `install.sh` - Automated installation script
+- Service configuration and auto-start setup
+
+**Tasks:**
+1. **Create growmate.service:**
+   - Service type: simple
+   - ExecStart: python3 main.py
+   - WorkingDirectory: /opt/growmate
+   - User: growmate (or root for GPIO access)
+   - Restart: always
+   - RestartSec: 10
+   - After: network-online.target
+2. **Create install.sh script:**
+   - Check if running as root
+   - Update system packages
+   - Install system dependencies
+   - Install Python dependencies
+   - Enable I2C and camera interfaces
+   - Clone GitHub repository to /opt/growmate
+   - Copy systemd service files
+   - Create config directory (/etc/growmate)
+   - Set file permissions
+   - Enable and start service
+   - Display status and next steps
+3. **Service management:**
+   - Enable service: `systemctl enable growmate`
+   - Start service: `systemctl start growmate`
+   - Configure auto-start on boot
+4. **Logging configuration:**
+   - Ensure logs go to systemd journal
+   - Configure log retention if needed
+5. **Testing:**
+   - Test installation on fresh Pi Zero W
+   - Verify service starts on boot
+   - Verify service restarts on failure
+   - Test manual stop/start/restart
+6. **Documentation:**
+   - Update README with installation instructions
+   - Document service management commands
+   - Document log viewing commands
+
+**Success Criteria:**
+- ✅ install.sh runs without errors
+- ✅ Service installs and starts successfully
+- ✅ Service starts automatically on boot
+- ✅ Service restarts automatically on failure
+- ✅ Logs visible via `journalctl -u growmate -f`
+- ✅ Can control service via systemctl commands
+- ✅ Installation works on fresh Raspberry Pi OS
+
+---
+
+### Phase 7: Testing & Documentation
+**Goal:** Validate system reliability and create comprehensive documentation
+
+**Time Estimate:** 4-6 hours
+
+**Deliverables:**
+- End-to-end test results
+- Failure scenario test results
+- Complete README.md
+- Troubleshooting guide
+- Wiring diagram
+- API documentation (if needed)
+
+**Tasks:**
+1. **End-to-end testing:**
+   - Fresh installation test
+   - Onboarding flow test (AP mode → configuration → client mode)
+   - Sensor reading and upload test
+   - Camera capture and upload test
+   - Actuator command test (pump, light)
+   - 24+ hour stability test
+2. **Failure scenario testing:**
+   - Network disconnection recovery
+   - API endpoint unavailable
+   - Sensor hardware disconnection
+   - Camera failure
+   - Power cycle recovery
+   - Consecutive failure threshold (AP mode fallback)
+3. **Performance testing:**
+   - Memory usage monitoring
+   - CPU usage monitoring
+   - Network bandwidth usage
+   - Power consumption measurement
+4. **Documentation - README.md:**
+   - Project overview and features
+   - Hardware requirements and BOM
+   - Wiring diagram
+   - Installation instructions
+   - Configuration guide
+   - Usage instructions
+   - Troubleshooting section
+   - API endpoint requirements
+5. **Troubleshooting guide:**
+   - Common issues and solutions
+   - Log analysis tips
+   - Hardware debugging steps
+   - Network connectivity issues
+   - Service management
+6. **Code documentation:**
+   - Add docstrings to all functions
+   - Add inline comments for complex logic
+   - Update type hints if used
+7. **Final validation:**
+   - Code review
+   - Security review (WiFi credentials, API keys)
+   - Performance optimization if needed
+
+**Success Criteria:**
+- ✅ System runs stably for 24+ hours
+- ✅ All failure scenarios handled gracefully
+- ✅ Complete README with all sections
+- ✅ Troubleshooting guide covers common issues
+- ✅ Wiring diagram is clear and accurate
+- ✅ Installation instructions tested and verified
+- ✅ Code is documented and readable
+- ✅ No critical bugs or security issues
+
+---
+
+### Total Estimated Time: 23-33 hours
+
+## Critical Technical Notes
+
+### ADC Requirement
+- Pi Zero W has **NO built-in ADC** (unlike ESP32)
+- ADS1115 provides 4 channels (need 3 for analog sensors)
+- 16-bit resolution (better than ESP32's 12-bit)
+- I2C interface (simple 2-wire connection)
+
+### AP Mode Complexity
+- More complex than ESP32's built-in AP mode
+- Requires hostapd (access point) + dnsmasq (DHCP/DNS)
+- Need to manage network interface switching
+- Potential conflicts with NetworkManager/dhcpcd
+- Fallback to AP mode on connection failures
+
+### Feature Parity with ESP32
+- ✅ All sensors supported (with ADS1115)
+- ✅ Camera (better quality: 5MP vs 2MP)
+- ✅ API upload and commands
+- ✅ Actuator control
+- ✅ Persistent configuration
+- ✅ Onboarding portal (AP mode)
+- ✅ Auto-recovery (via systemd)
+
+## Open Questions
+
+1. **GitHub Repository:** Create repo structure now, or provide existing private repo URL?
+2. **Device ID:** Auto-generate from MAC (e.g., "growmate-b827eb123456") or user-configurable?
+3. **AP Fallback:** Auto-enter AP mode after X failed connection attempts (like ESP32 after 5 failures)?
+4. **API Endpoint:** Use placeholder or do you have actual API URL?
+
+## Installation Flow
+
+```bash
+# On fresh Raspberry Pi OS
+curl -sSL https://raw.githubusercontent.com/USER/rpi-growmate-pods/main/scripts/install.sh | bash
+
+# Script installs dependencies, clones repo, configures system, sets up services
+# Reboot → AP mode → User configures via web portal → Client mode → Normal operation
+```
+
+## Advantages Over ESP32
+
+- 512MB RAM vs 520KB (1000x more)
+- Better camera (5MP vs 2MP)
+- Full Linux OS (easier debugging)
+- Better ADC resolution (16-bit vs 12-bit)
+- More flexible configuration
+
+## Disadvantages
+
+- Requires external ADC module (+$5)
+- Higher power consumption (~150mA vs ~80mA)
+- Higher total cost ($69 vs $40)
+- Longer boot time (30-60s vs 1-2s)
+- More complex AP mode setup

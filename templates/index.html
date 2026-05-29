@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GrowMate Setup</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌱 GrowMate Setup</h1>
+            <p class="subtitle">Configure your plant monitoring device</p>
+        </div>
+
+        <div class="card">
+            <h2>Device Information</h2>
+            <div class="info-row">
+                <span class="label">Device ID:</span>
+                <span class="value" id="deviceId">Loading...</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>WiFi Configuration</h2>
+            
+            <form id="configForm">
+                <div class="form-group">
+                    <label for="wifiSsid">WiFi Network</label>
+                    <div class="input-with-button">
+                        <select id="wifiSsid" name="wifiSsid" required>
+                            <option value="">Select a network...</option>
+                        </select>
+                        <button type="button" id="scanButton" class="btn-secondary">Scan</button>
+                    </div>
+                    <div id="scanStatus" class="status-message"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="wifiPassword">WiFi Password</label>
+                    <input type="password" id="wifiPassword" name="wifiPassword" 
+                           placeholder="Enter WiFi password" required>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary" id="submitButton">
+                        Save and Continue
+                    </button>
+                </div>
+            </form>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="successMessage" class="success-message" style="display: none;"></div>
+        </div>
+
+        <div class="footer">
+            <p>After saving, your device will connect to the configured WiFi network and begin monitoring.</p>
+        </div>
+    </div>
+
+    <script>
+        // Load device information
+        async function loadDeviceInfo() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                document.getElementById('deviceId').textContent = data.deviceId;
+            } catch (error) {
+                console.error('Failed to load device info:', error);
+                document.getElementById('deviceId').textContent = 'Error loading';
+            }
+        }
+
+        // Scan for WiFi networks
+        async function scanNetworks() {
+            const scanButton = document.getElementById('scanButton');
+            const scanStatus = document.getElementById('scanStatus');
+            const wifiSelect = document.getElementById('wifiSsid');
+            
+            scanButton.disabled = true;
+            scanButton.textContent = 'Scanning...';
+            scanStatus.textContent = 'Scanning for networks...';
+            scanStatus.className = 'status-message';
+            
+            try {
+                const response = await fetch('/api/networks');
+                const data = await response.json();
+                
+                // Clear existing options
+                wifiSelect.innerHTML = '<option value="">Select a network...</option>';
+                
+                // Add networks
+                if (data.networks && data.networks.length > 0) {
+                    data.networks.forEach(network => {
+                        const option = document.createElement('option');
+                        option.value = network.ssid;
+                        option.textContent = `${network.ssid} (${network.rssi} dBm)`;
+                        wifiSelect.appendChild(option);
+                    });
+                    scanStatus.textContent = `Found ${data.networks.length} network(s)`;
+                    scanStatus.className = 'status-message success';
+                } else {
+                    scanStatus.textContent = 'No networks found';
+                    scanStatus.className = 'status-message error';
+                }
+            } catch (error) {
+                console.error('Scan failed:', error);
+                scanStatus.textContent = 'Scan failed. Please try again.';
+                scanStatus.className = 'status-message error';
+            } finally {
+                scanButton.disabled = false;
+                scanButton.textContent = 'Scan';
+            }
+        }
+
+        // Save configuration
+        async function saveConfig(event) {
+            event.preventDefault();
+            
+            const submitButton = document.getElementById('submitButton');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+            
+            submitButton.disabled = true;
+            submitButton.textContent = 'Saving...';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            
+            const formData = {
+                wifiSsid: document.getElementById('wifiSsid').value,
+                wifiPassword: document.getElementById('wifiPassword').value
+            };
+            
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    successMessage.textContent = data.message || 'Configuration saved successfully!';
+                    successMessage.style.display = 'block';
+                    
+                    // Redirect to success page after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/success';
+                    }, 2000);
+                } else {
+                    errorMessage.textContent = data.error || 'Failed to save configuration';
+                    errorMessage.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Save and Continue';
+                }
+            } catch (error) {
+                console.error('Save failed:', error);
+                errorMessage.textContent = 'Network error. Please try again.';
+                errorMessage.style.display = 'block';
+                submitButton.disabled = false;
+                submitButton.textContent = 'Save and Continue';
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDeviceInfo();
+            scanNetworks(); // Auto-scan on load
+            
+            document.getElementById('scanButton').addEventListener('click', scanNetworks);
+            document.getElementById('configForm').addEventListener('submit', saveConfig);
+        });
+    </script>
+</body>
+</html>

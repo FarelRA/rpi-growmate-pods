@@ -1,0 +1,34 @@
+[Unit]
+Description=GrowMate Pods - Plant Monitoring System
+Documentation=https://github.com/USER/rpi-growmate-pods
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/growmate/src
+ExecStart=/usr/bin/python3 /opt/growmate/src/main.py
+
+# Restart configuration
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=growmate
+
+# Security hardening (optional, adjust as needed)
+# PrivateTmp=yes
+# NoNewPrivileges=true
+# ProtectSystem=strict
+# ProtectHome=yes
+# ReadWritePaths=/etc/growmate
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

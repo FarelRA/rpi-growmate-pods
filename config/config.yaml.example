@@ -1,0 +1,58 @@
+# GrowMate Pods Configuration Example
+# Copy this file to /etc/growmate/config.yaml and customize
+
+# Configuration version (do not modify)
+version: 4
+
+# Device identification
+device:
+  # Device ID (auto-generated from MAC address if not specified)
+  id: "growmate-b827eb123456"
+
+# Network configuration
+network:
+  # Provisioning status (set to true after onboarding)
+  provisioned: false
+  
+  # WiFi credentials (configured via onboarding portal)
+  wifi_ssid: ""
+  wifi_password: ""
+
+# API endpoints
+api:
+  # Sensor data upload endpoint
+  sensor_url: "https://avid-mammoth-766.convex.site/api/sensors"
+  
+  # Camera image upload endpoint
+  camera_url: "https://avid-mammoth-766.convex.site/api/camera"
+
+# Reading intervals (in seconds)
+intervals:
+  # How often to read sensors and upload data
+  sensor_reading: 15
+  
+  # How often to capture and upload camera images
+  camera_capture: 900  # 15 minutes
+
+# Sensor calibration values
+# These map raw ADC values (0-65535) to percentages (0-100%)
+calibration:
+  # Soil moisture sensor
+  soil_moisture:
+    min: 0      # Raw value when completely dry
+    max: 65535  # Raw value when completely wet
+  
+  # Light sensor
+  light:
+    min: 0      # Raw value in darkness
+    max: 65535  # Raw value in bright light
+  
+  # Water level sensor
+  water_level:
+    min: 0      # Raw value when empty
+    max: 65535  # Raw value when full
+
+# Sensor feature flags
+sensors:
+  # Enable DHT22 temperature/humidity sensor
+  enable_dht22: true

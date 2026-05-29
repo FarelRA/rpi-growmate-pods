@@ -1,0 +1,25 @@
+# dnsmasq configuration for GrowMate Pods AP mode
+# Provides DHCP and DNS services for onboarding portal
+
+# Interface to bind to
+interface=wlan0
+
+# Don't bind to other interfaces
+bind-interfaces
+
+# DHCP server configuration
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+dhcp-option=3,192.168.4.1  # Gateway
+dhcp-option=6,192.168.4.1  # DNS server
+
+# DNS configuration
+# Redirect all DNS queries to our IP for captive portal
+address=/#/192.168.4.1
+
+# Don't read /etc/resolv.conf or /etc/hosts
+no-resolv
+no-hosts
+
+# Logging
+log-queries
+log-dhcp

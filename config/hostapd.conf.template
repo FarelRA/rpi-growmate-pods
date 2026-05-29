@@ -1,0 +1,30 @@
+# hostapd configuration for GrowMate Pods AP mode
+# This file is used when device enters onboarding mode
+
+interface=wlan0
+driver=nl80211
+
+# AP configuration
+ssid=GrowMate-XXXXXX
+hw_mode=g
+channel=1
+ieee80211n=1
+wmm_enabled=1
+
+# Security
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+wpa_passphrase=growmate
+rsn_pairwise=CCMP
+
+# Logging
+logger_syslog=-1
+logger_syslog_level=2
+logger_stdout=-1
+logger_stdout_level=2
+
+# Other settings
+max_num_sta=4
+beacon_int=100
+dtim_period=2

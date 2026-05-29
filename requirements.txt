@@ -1,0 +1,31 @@
+# Raspberry Pi GrowMate Pods - Python Dependencies
+
+# Camera support (Pi Camera Module v1)
+picamera2>=0.3.12
+
+# GPIO control
+gpiozero>=1.6.2
+RPi.GPIO>=0.7.1
+
+# ADC support (ADS1115)
+adafruit-circuitpython-ads1x15>=2.2.21
+adafruit-blinka>=8.20.0
+
+# DHT22 temperature/humidity sensor
+adafruit-circuitpython-dht>=3.7.9
+
+# HTTP client for API communication
+requests>=2.28.0
+
+# Web server for onboarding portal
+flask>=2.3.0
+werkzeug>=2.3.0
+
+# Configuration management
+pyyaml>=6.0
+
+# System utilities
+psutil>=5.9.0
+
+# Logging
+python-systemd>=234
