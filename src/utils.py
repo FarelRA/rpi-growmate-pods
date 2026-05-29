@@ -1,13 +1,18 @@
 """
 Utility functions and helpers for GrowMate Pods.
 
-Provides logging setup, retry decorators, and common helper functions.
+Provides logging setup and common helper functions.
+
+Removed old retry decorator (replaced by retry_handler.py with exponential backoff).
+Updated firmware version to 2.4.0 for hot-reload & validation support.
+Updated firmware version to 2.5.0 for structured JSON logging with correlation IDs.
+Updated firmware version to 2.6.0 for minimal web interface (WiFi credentials only).
+
+Note: The setup_logging() function in this file is deprecated. Use logging_config.py instead.
 """
 
 import logging
-import time
-import functools
-from typing import Callable, Any, Optional
+from typing import Optional
 from systemd import journal
 
 
@@ -43,48 +48,6 @@ def setup_logging(name: str = "growmate") -> logging.Logger:
     logger.addHandler(console_handler)
     
     return logger
-
-
-def retry(max_attempts: int = 2, delay_seconds: float = 1.5, 
-          exceptions: tuple = (Exception,)) -> Callable:
-    """
-    Decorator to retry a function on failure.
-    
-    Based on ESP32 retry pattern: 2 attempts with 1.5s delay.
-    
-    Args:
-        max_attempts: Maximum number of attempts (default: 2)
-        delay_seconds: Delay between attempts in seconds (default: 1.5)
-        exceptions: Tuple of exceptions to catch (default: all exceptions)
-        
-    Returns:
-        Decorated function
-        
-    Example:
-        @retry(max_attempts=3, delay_seconds=2.0)
-        def upload_data():
-            # ... upload logic
-            pass
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_exception = None
-            
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt < max_attempts - 1:
-                        time.sleep(delay_seconds)
-                    continue
-            
-            # All attempts failed, raise the last exception
-            raise last_exception
-        
-        return wrapper
-    return decorator
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
@@ -181,20 +144,24 @@ def get_ap_ssid() -> str:
     return f"GrowMate-{suffix}"
 
 
-# Constants from ESP32 implementation
+# Application constants
 SENSOR_INTERVAL_SECONDS = 15
 CAMERA_INTERVAL_SECONDS = 900  # 15 minutes
-WIFI_TIMEOUT_SECONDS = 12
-UPLOAD_RETRY_COUNT = 2
-UPLOAD_RETRY_DELAY = 1.5
 FAILURE_THRESHOLD = 5  # Re-enter onboarding after 5 consecutive failures
 PUMP_HOUSEKEEPING_INTERVAL_MS = 250
 
-# API endpoints (from ESP32 analysis)
+# API endpoints
 API_SENSOR_ENDPOINT = "https://avid-mammoth-766.convex.site/api/sensors"
 API_CAMERA_ENDPOINT = "https://avid-mammoth-766.convex.site/api/camera"
 API_TIMEOUT_SENSOR = 12.0  # seconds
 API_TIMEOUT_CAMERA = 45.0  # seconds
 
-# Firmware version (matches ESP32 exactly)
-FIRMWARE_VERSION = "2.0.0"
+# Queue settings (Offline operation)
+QUEUE_DATABASE_PATH = "/var/lib/growmate/queue.db"
+QUEUE_CLEANUP_INTERVAL = 3600  # seconds (1 hour)
+QUEUE_MAX_AGE_HOURS = 24  # Delete entries older than 24 hours
+QUEUE_MAX_RETRIES = 5  # Maximum upload retry attempts
+QUEUE_VACUUM_INTERVAL = 604800  # seconds (1 week)
+
+# Firmware version (Web Interface - minimal onboarding, WiFi credentials only)
+FIRMWARE_VERSION = "2.6.0"

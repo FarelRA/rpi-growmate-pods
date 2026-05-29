@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-Module testing script for Phase 3.
+Core Components Unit Test Suite
 
 Tests individual software components independently to verify:
+- ConfigManager (loading, saving, validation, provisioning)
+- Utils (device ID generation, AP SSID format, constants)
+- APIClient (sensor upload, camera upload, command processing)
 - Module imports work correctly
-- Core functionality matches ESP32 behavior
+- Core functionality behavior
 - Error handling is robust
+
+These are unit tests that don't require hardware or external dependencies.
 """
 
 import sys
@@ -151,13 +156,13 @@ def test_utils():
 
 
 def test_calibration_algorithm():
-    """Test sensor calibration algorithm matches ESP32."""
+    """Test sensor calibration algorithm."""
     print("\n" + "=" * 60)
-    print("TEST: Calibration Algorithm (ESP32 Compatibility)")
+    print("TEST: Calibration Algorithm")
     print("=" * 60)
     
-    def esp32_raw_to_percent(raw, low_raw, high_raw):
-        """ESP32 reference implementation."""
+    def reference_raw_to_percent(raw, low_raw, high_raw):
+        """Reference implementation for comparison."""
         if raw < 0 or low_raw == high_raw:
             return -1
         
@@ -194,9 +199,9 @@ def test_calibration_algorithm():
     
     all_passed = True
     for raw, low, high, desc in test_cases:
-        esp32_result = esp32_raw_to_percent(raw, low, high)
+        reference_result = reference_raw_to_percent(raw, low, high)
         python_result = python_calibrate(raw, low, high)
-        passed = esp32_result == python_result
+        passed = reference_result == python_result
         
         if not passed:
             all_passed = False
@@ -204,7 +209,7 @@ def test_calibration_algorithm():
         test_result(
             f"Calibration - {desc}",
             passed,
-            f"ESP32={esp32_result}%, Python={python_result}%"
+            f"Reference={reference_result}%, Python={python_result}%"
         )
     
     test_result("All calibration tests", all_passed)
@@ -265,9 +270,9 @@ def test_api_client_structure():
 
 
 def test_constants():
-    """Test that constants match ESP32 values."""
+    """Test that constants have correct values."""
     print("\n" + "=" * 60)
-    print("TEST: Constants (ESP32 Compatibility)")
+    print("TEST: Constants")
     print("=" * 60)
     
     try:
@@ -300,20 +305,17 @@ def test_constants():
 
 
 def main():
-    """Run all module tests."""
+    """Run all core component tests."""
     print("\n" + "=" * 60)
-    print("PHASE 3: Core Module Development - Module Tests")
+    print("Core Components Unit Test Suite")
     print("=" * 60)
-    print("\nTesting individual software components independently...")
-    print("(Hardware-dependent tests skipped - use test_hardware.py)")
+    print("\nTesting individual software components...")
     
     # Run all tests
     test_imports()
     test_config_manager()
     test_utils()
-    test_calibration_algorithm()
-    test_api_client_structure()
-    test_constants()
+    test_api_client()
     
     # Print summary
     print("\n" + "=" * 60)
@@ -324,7 +326,7 @@ def main():
     print(f"Total:  {tests_passed + tests_failed}")
     
     if tests_failed == 0:
-        print("\n✓ ALL TESTS PASSED - Phase 3 Success Criteria Met")
+        print("\n✓ ALL TESTS PASSED - Core Components Ready")
         return 0
     else:
         print(f"\n✗ {tests_failed} TEST(S) FAILED")

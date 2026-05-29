@@ -1,0 +1,403 @@
+# Hardware Guide
+
+Complete hardware requirements, component selection, and setup guide for GrowMate Pods.
+
+## Table of Contents
+
+- [Bill of Materials](#bill-of-materials)
+- [Component Details](#component-details)
+- [Hardware Requirements](#hardware-requirements)
+- [Power Requirements](#power-requirements)
+- [Assembly](#assembly)
+- [Alternative Components](#alternative-components)
+
+## Bill of Materials
+
+### Required Components
+
+| Component | Specification | Approx. Cost | Where to Buy | Notes |
+|-----------|--------------|--------------|--------------|-------|
+| Raspberry Pi Zero W | BCM2835, 512MB RAM, WiFi | $15 | Adafruit, PiShop, Amazon | Any Pi with WiFi works |
+| Pi Camera Module v1 | 5MP, CSI interface | $15 | Adafruit, Amazon | v2 (8MP) also works |
+| ADS1115 ADC | 16-bit, 4-channel, I2C | $5 | Adafruit, Amazon | **Required** - Pi has no ADC |
+| DHT22 Sensor | Digital temp/humidity | $5 | Adafruit, Amazon | DHT11 works but less accurate |
+| Soil Moisture Sensor | Analog capacitive | $3 | Amazon, AliExpress | Capacitive preferred over resistive |
+| Light Sensor | Photoresistor module | $3 | Amazon, AliExpress | Any analog light sensor works |
+| Water Level Sensor | Analog resistive | $3 | Amazon, AliExpress | Float switch is alternative |
+| 2-Channel Relay Module | 5V, optocoupler isolated | $5 | Amazon, AliExpress | Must be optocoupler isolated |
+| MicroSD Card | 16GB+ Class 10 | $8 | Amazon, Best Buy | 32GB recommended |
+| Power Supply | 5V 2.5A micro USB | $8 | Amazon, Adafruit | Official Pi PSU recommended |
+| Jumper Wires | Male-to-female, 20cm | $5 | Amazon, Adafruit | Assorted pack |
+| **Total** | | **~$75** | | |
+
+### Optional Components
+
+| Component | Purpose | Cost |
+|-----------|---------|------|
+| Breadboard | Prototyping | $5 |
+| Enclosure | Weather protection | $10-20 |
+| Heat sinks | Pi cooling | $3 |
+| Water pump | Automated watering | $5-10 |
+| Grow light | Plant lighting | $10-20 |
+| Tubing | Water delivery | $5 |
+
+## Component Details
+
+### Raspberry Pi Zero W
+
+**Why this model:**
+- Built-in WiFi (essential for cloud connectivity)
+- Low power consumption (~150mA)
+- Small form factor
+- Sufficient processing power for image capture and sensor reading
+
+**Alternatives:**
+- **Raspberry Pi Zero 2 W** - Faster quad-core, better for image processing ($15)
+- **Raspberry Pi 3/4** - More powerful but higher cost and power consumption ($35-55)
+- **Raspberry Pi 5** - Latest model with best performance ($60+)
+
+**Not recommended:**
+- Raspberry Pi Zero (no WiFi) - requires USB WiFi adapter
+- Raspberry Pi Pico - different architecture, not compatible
+
+### Pi Camera Module
+
+**Supported models:**
+- **Pi Camera v1** (5MP) - Works and recommended
+- **Pi Camera v2** (8MP) - Works, higher resolution
+- **Pi Camera v3** (12MP) - Works with latest Pi OS
+- **Pi HQ Camera** - Professional quality, requires lens
+
+**Connection:** CSI ribbon cable (included with camera)
+
+**Important:** Enable camera interface in `raspi-config` before use
+
+### ADS1115 ADC Module
+
+**Why it's required:**
+Raspberry Pi has no built-in analog-to-digital converter (ADC). The ADS1115 provides 4 analog input channels.
+
+**Specifications:**
+- 16-bit resolution (0-65535 values)
+- I2C interface (address 0x48)
+- 4 single-ended or 2 differential inputs
+- Programmable gain amplifier
+- 3.3V or 5V operation (use 3.3V with Pi)
+
+**Alternatives:**
+- **ADS1015** - 12-bit version, cheaper but lower resolution
+- **MCP3008** - 10-bit, SPI interface (requires different wiring)
+
+### DHT22 Temperature/Humidity Sensor
+
+**Specifications:**
+- Temperature range: -40°C to 80°C (±0.5°C accuracy)
+- Humidity range: 0-100% RH (±2-5% accuracy)
+- Digital output (single-wire protocol)
+- Requires 10kΩ pull-up resistor
+
+**Alternatives:**
+- **DHT11** - Cheaper but less accurate (±2°C, ±5% RH)
+- **BME280** - More accurate, includes pressure sensor, I2C interface
+- **SHT31** - Higher accuracy, I2C interface
+
+**Important:** DHT22 requires a 10kΩ pull-up resistor between VCC and Data pin
+
+### Soil Moisture Sensor
+
+**Recommended type:** Capacitive
+
+**Why capacitive:**
+- No exposed metal contacts (corrosion-resistant)
+- Longer lifespan
+- More accurate readings
+- Works in various soil types
+
+**Avoid:** Resistive sensors with exposed metal prongs (corrode quickly)
+
+**Output:** Analog voltage (0-3.3V) proportional to moisture level
+
+**Calibration required:** Yes - measure dry and wet values for accurate percentages
+
+### Light Sensor
+
+**Type:** Photoresistor (LDR) module with voltage divider
+
+**Output:** Analog voltage inversely proportional to light intensity
+
+**Range:** Typically 0-3.3V (bright to dark)
+
+**Alternatives:**
+- **BH1750** - Digital I2C light sensor with lux output
+- **TSL2561** - Digital I2C luminosity sensor
+
+### Water Level Sensor
+
+**Type:** Analog resistive strip
+
+**Output:** Analog voltage proportional to water level
+
+**Alternatives:**
+- **Float switch** - Digital on/off, simpler but less precise
+- **Ultrasonic sensor** - Non-contact, more expensive
+
+### Relay Module
+
+**Requirements:**
+- 2 channels minimum (pump + light)
+- 5V coil voltage
+- **Optocoupler isolation** (protects Pi from back-EMF)
+- Normally Open (NO) contacts
+
+**Specifications:**
+- Control voltage: 3.3V or 5V (both work with Pi GPIO)
+- Contact rating: 10A @ 250VAC / 10A @ 30VDC (typical)
+- Trigger: Active LOW (relay on when GPIO LOW)
+
+**Important:** Never connect high-voltage AC directly to Pi. Use relay for isolation.
+
+### MicroSD Card
+
+**Minimum:** 16GB Class 10
+
+**Recommended:** 32GB Class 10 or UHS-I
+
+**Why larger is better:**
+- OS and software: ~4GB
+- Offline queue storage: ~150MB per day
+- Logs: ~100MB per month
+- Headroom for updates and data
+
+**Avoid:**
+- No-name brands (reliability issues)
+- Cards slower than Class 10 (poor performance)
+- Cards smaller than 16GB (insufficient space)
+
+### Power Supply
+
+**Requirements:**
+- Voltage: 5V ±5% (4.75V - 5.25V)
+- Current: 2.5A minimum
+- Connector: Micro USB (for Pi Zero W)
+
+**Power budget:**
+- Pi Zero W: 150mA idle, 350mA peak
+- Camera: 200mA during capture
+- Sensors: 50mA total
+- Relay module: 100mA (coils energized)
+- **Total:** ~700mA typical, 1000mA peak
+
+**Recommended:** Official Raspberry Pi power supply (2.5A or 3A)
+
+**Important:** Insufficient power causes:
+- Random reboots
+- Camera failures
+- Corrupted SD card
+- WiFi disconnections
+
+## Hardware Requirements
+
+### Minimum System Requirements
+
+- Raspberry Pi with WiFi capability
+- 512MB RAM minimum
+- MicroSD card (16GB+)
+- Camera support (CSI port)
+- I2C support (all Pi models have this)
+- 2 free GPIO pins for relays
+- 1 free GPIO pin for DHT22
+
+### Operating System
+
+**Recommended:** Raspberry Pi OS Lite (64-bit or 32-bit)
+
+**Why Lite:**
+- No desktop environment (saves resources)
+- Faster boot time
+- Lower power consumption
+- Sufficient for headless operation
+
+**Minimum version:** Bullseye (Debian 11)
+
+## Power Requirements
+
+### Power Consumption Analysis
+
+**Idle state (no camera, no relays):**
+- Pi Zero W: 150mA
+- Sensors (DHT22, ADS1115): 10mA
+- **Total: 160mA @ 5V = 0.8W**
+
+**Active state (camera capturing):**
+- Pi Zero W: 350mA
+- Camera: 200mA
+- Sensors: 10mA
+- **Total: 560mA @ 5V = 2.8W**
+
+**Peak state (camera + relays active):**
+- Pi Zero W: 350mA
+- Camera: 200mA
+- Sensors: 10mA
+- Relay module: 100mA (both coils)
+- **Total: 660mA @ 5V = 3.3W**
+
+**External loads (pump, light):**
+- Not powered by Pi
+- Powered through relay contacts from separate supply
+- Can be 12V, 24V, or 120VAC depending on devices
+
+### Power Supply Sizing
+
+**For Pi and sensors only:**
+- Minimum: 2A (10W)
+- Recommended: 2.5A (12.5W)
+
+**If powering pump/light from same 5V supply:**
+- Add pump current (typically 500mA - 2A)
+- Add light current (typically 500mA - 3A)
+- Use separate 5V supply with adequate current rating
+
+**Best practice:** Use separate power supplies for:
+1. Pi + sensors (5V 2.5A)
+2. Pump (12V or voltage required by pump)
+3. Grow light (12V or voltage required by light)
+
+### Power Protection
+
+**Recommended additions:**
+- **Fuse:** 2A fast-blow fuse on Pi power input
+- **TVS diode:** Transient voltage suppression on relay outputs
+- **Capacitor:** 1000µF electrolytic near Pi power input (reduces voltage drops)
+
+## Assembly
+
+### Quick Start
+
+1. **Prepare the Pi:**
+   - Flash Raspberry Pi OS Lite to MicroSD card
+   - Enable I2C and Camera in `raspi-config`
+   - Update system: `sudo apt update && sudo apt upgrade`
+
+2. **Connect the camera:**
+   - Insert ribbon cable into CSI port (contacts facing away from USB ports)
+   - Secure the latch
+
+3. **Wire the sensors:**
+   - Follow the detailed wiring guide in [WIRING.md](WIRING.md)
+   - Double-check all connections before powering on
+
+4. **Install software:**
+   - Run the installation script (see README)
+   - Configure WiFi through onboarding portal
+
+5. **Test hardware:**
+   - Run `sudo python3 /opt/growmate/scripts/test_hardware.py`
+   - Verify all sensors are detected and reading correctly
+
+### Detailed Assembly
+
+See [WIRING.md](WIRING.md) for:
+- Step-by-step wiring instructions
+- Detailed diagrams for each component
+- Pin assignment tables
+- Testing procedures
+- Safety notes
+
+## Alternative Components
+
+### Budget Options
+
+**Reduce cost by ~$20:**
+- Use DHT11 instead of DHT22 ($2 savings)
+- Use Pi Camera v1 (often cheaper than v2)
+- Use generic sensors from AliExpress
+- Reuse old phone charger for power (if 2A+)
+- Skip optional components initially
+
+**Total budget build: ~$55**
+
+### Premium Options
+
+**Increase reliability and features:**
+- Pi Zero 2 W for faster processing ($15)
+- BME280 for better temp/humidity/pressure ($10)
+- BH1750 digital light sensor ($3)
+- Industrial-grade relay module ($15)
+- Waterproof sensors ($5-10 each)
+- Official Pi power supply ($8)
+- Quality enclosure with cable glands ($20)
+
+**Total premium build: ~$120**
+
+### Sensor Alternatives
+
+| Standard | Alternative | Pros | Cons |
+|----------|-------------|------|------|
+| DHT22 | BME280 | More accurate, I2C, includes pressure | More expensive |
+| Photoresistor | BH1750 | Digital, lux output, more accurate | Requires I2C address management |
+| Analog water sensor | Float switch | Simple, reliable, digital | Only on/off, no level measurement |
+| Capacitive soil | Resistive soil | Cheaper | Corrodes quickly |
+
+## Tips and Best Practices
+
+### Component Selection
+
+1. **Buy from reputable sellers** - Avoid counterfeit components
+2. **Check reviews** - Especially for sensors and power supplies
+3. **Buy spares** - Sensors can fail, having spares saves time
+4. **Test before assembly** - Verify components work before permanent installation
+
+### Wiring
+
+1. **Use proper wire gauge** - 22-24 AWG for signal, 18-20 AWG for power
+2. **Keep wires short** - Reduces noise and voltage drop
+3. **Separate power and signal** - Prevents interference
+4. **Label everything** - Makes troubleshooting easier
+5. **Use heat shrink** - Protect connections from moisture
+
+### Installation
+
+1. **Weatherproof if outdoor** - Use IP65+ enclosure
+2. **Ventilate enclosure** - Prevent condensation
+3. **Elevate from ground** - Protect from water damage
+4. **Secure cables** - Use cable ties and strain relief
+5. **Test before sealing** - Verify everything works before closing enclosure
+
+### Maintenance
+
+1. **Clean sensors monthly** - Especially soil moisture sensor
+2. **Check connections quarterly** - Look for corrosion
+3. **Replace SD card yearly** - Prevent wear-out failures
+4. **Update software regularly** - Security and bug fixes
+5. **Monitor logs** - Catch issues early
+
+## Safety Notes
+
+### Electrical Safety
+
+- **Never work on live circuits** - Disconnect power before wiring
+- **Use proper insulation** - Prevent short circuits
+- **Respect voltage ratings** - Don't exceed component specifications
+- **Ground properly** - Use common ground for all components
+- **Fuse protection** - Use fuses on power inputs
+
+### Water Safety
+
+- **Keep electronics dry** - Use waterproof enclosures
+- **GFCI protection** - Use GFCI outlets for AC-powered devices
+- **Separate water and power** - Route cables away from water
+- **Check for leaks** - Inspect tubing and connections regularly
+
+### Chemical Safety
+
+- **Fertilizers** - Can corrode sensors, rinse sensors after use
+- **pH extremes** - Can damage sensors, keep pH 4-10
+- **Cleaning** - Use isopropyl alcohol, not water, for electronics
+
+## Support
+
+For wiring help, see [WIRING.md](WIRING.md)
+
+For troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+For configuration, see [CONFIGURATION.md](CONFIGURATION.md)

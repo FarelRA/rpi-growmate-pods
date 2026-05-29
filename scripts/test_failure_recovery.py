@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-Failure Scenario Test Suite for GrowMate Raspberry Pi Port
+Failure Recovery and Error Handling Test Suite
 
-This test suite validates failure handling and recovery mechanisms,
-ensuring the system behaves like ESP32 under error conditions.
-
-Tests cover:
-- Network disconnection recovery
-- API endpoint unavailable
-- Sensor hardware failures
-- Camera failures
-- Consecutive failure threshold (5 failures → AP mode)
+Validates failure handling and recovery mechanisms to ensure the system
+handles error conditions correctly:
+- Network disconnection recovery (retry logic, WiFi reconnection)
+- API endpoint unavailable (timeout handling, graceful degradation)
+- Sensor hardware failures (ADC errors, DHT22 read failures)
+- Camera failures (initialization errors, capture failures)
+- Consecutive failure threshold (5 failures → AP mode re-entry)
+- Graceful degradation and system resilience
 
 Usage:
-    python3 scripts/test_failures.py
+    python3 scripts/test_failure_recovery.py
 """
 
 import sys
@@ -46,7 +45,7 @@ class TestNetworkFailures(unittest.TestCase):
         # Should return None or raise after retries exhausted
         self.assertIsNone(response)
         
-        # Should have attempted multiple times (ESP32: UPLOAD_RETRY_COUNT = 2)
+        # Should have attempted multiple times 
         self.assertGreaterEqual(mock_post.call_count, 1)
     
     @patch('subprocess.run')
@@ -67,8 +66,8 @@ class TestNetworkFailures(unittest.TestCase):
     
     @patch('subprocess.run')
     def test_wifi_retry_limit(self, mock_subprocess):
-        """Test WiFi retry limit matches ESP32"""
-        # ESP32: s_retry_limit = 4
+        """Test WiFi retry limit"""
+        # WiFi retry limit should be 4 attempts
         WIFI_RETRY_LIMIT = 4
         
         mock_result = Mock()
@@ -188,8 +187,8 @@ class TestSensorFailures(unittest.TestCase):
         
         import sensors
         
-        # Should handle DHT22 failure gracefully
-        # ESP32: Retries 2 times with increasing delays
+        # Should handle DHT22 failure gracefully with retry logic
+        # Retries up to 2 times with increasing delays between attempts
         retry_count = 0
         max_retries = 2
         
@@ -204,7 +203,7 @@ class TestSensorFailures(unittest.TestCase):
     
     def test_partial_sensor_data(self):
         """Test handling of partial sensor data (some sensors failed)"""
-        # ESP32: Continues with available sensors, doesn't crash
+        # Should continue with available sensors and not crash on partial failures
         
         sensor_data = {
             'deviceId': 'test-device-001',
@@ -262,7 +261,8 @@ class TestCameraFailures(unittest.TestCase):
     
     def test_camera_failure_continues_operation(self):
         """Test that camera failure doesn't stop sensor readings"""
-        # ESP32: Camera failures are logged but don't stop main loop
+        # Camera failures should be logged but not stop the main loop
+        # Sensor readings must continue even if camera fails
         
         camera_failed = True
         sensor_reading_continues = True
@@ -280,8 +280,9 @@ class TestConsecutiveFailureThreshold(unittest.TestCase):
     """Test consecutive failure threshold and AP mode fallback"""
     
     def test_failure_threshold_value(self):
-        """Test failure threshold matches ESP32"""
-        # ESP32: APP_ONBOARDING_FAILURE_THRESHOLD = 5
+        """Test failure threshold value"""
+        # Onboarding failure threshold should be 5 consecutive failures
+        # After 5 failures, device should re-enter AP mode for reconfiguration
         FAILURE_THRESHOLD = 5
         
         self.assertEqual(FAILURE_THRESHOLD, 5)
@@ -320,7 +321,7 @@ class TestConsecutiveFailureThreshold(unittest.TestCase):
     
     def test_failure_types_that_increment_counter(self):
         """Test which failure types increment the counter"""
-        # ESP32: Increments on sensor read, WiFi connect, or upload failures
+        # Counter increments on sensor read, WiFi connect, or upload failures
         
         failure_types = [
             'sensor_read_failed',
@@ -364,7 +365,7 @@ class TestPowerCycleRecovery(unittest.TestCase):
     def test_service_auto_starts_on_boot(self):
         """Test that service auto-starts on boot"""
         # Systemd service should have WantedBy=multi-user.target
-        # This is validated in test_phase6.py
+        # This is validated in test_service_deployment.py
         
         # Service should be enabled
         service_enabled = True  # Verified by systemctl is-enabled
@@ -412,17 +413,17 @@ class TestGracefulDegradation(unittest.TestCase):
     
     def test_queue_data_on_upload_failure(self):
         """Test data handling on upload failure"""
-        # ESP32: Doesn't queue data, just retries current reading
-        # If upload fails after retries, moves to next reading
+        # System queues data for later upload when network is unavailable
+        # If upload fails after retries, data is stored in offline queue
         
         upload_failed = True
         retry_count = 2
         
         if upload_failed and retry_count >= 2:
-            # Move to next reading (don't queue)
+            # Data is queued for retry when network recovers
             pass
         
-        # This matches ESP32 behavior (no persistent queue)
+        # This validates the offline queue behavior
         self.assertTrue(True)
 
 

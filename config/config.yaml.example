@@ -1,8 +1,8 @@
 # GrowMate Pods Configuration Example
 # Copy this file to /etc/growmate/config.yaml and customize
 
-# Configuration version (do not modify)
-version: 4
+# Configuration version (incremented for breaking changes)
+version: 8
 
 # Device identification
 device:
@@ -25,6 +25,10 @@ api:
   
   # Camera image upload endpoint
   camera_url: "https://avid-mammoth-766.convex.site/api/camera"
+  
+  # API timeouts (in seconds)
+  timeout_sensor: 12.0
+  timeout_camera: 45.0
 
 # Reading intervals (in seconds)
 intervals:
@@ -34,11 +38,23 @@ intervals:
   # How often to capture and upload camera images
   camera_capture: 900  # 15 minutes
 
+# Camera configuration (Full 5MP support)
+camera:
+  # Resolution (5MP = 2592x1944)
+  width: 2592
+  height: 1944
+  
+  # JPEG quality (50-100, higher = better quality but larger files)
+  quality: 85
+  
+  # Add EXIF metadata (timestamp, device ID, sensor readings)
+  add_exif: true
+
 # Sensor calibration values
 # These map raw ADC values (0-65535) to percentages (0-100%)
 calibration:
   # Soil moisture sensor
-  soil_moisture:
+  soil:
     min: 0      # Raw value when completely dry
     max: 65535  # Raw value when completely wet
   
@@ -48,7 +64,7 @@ calibration:
     max: 65535  # Raw value in bright light
   
   # Water level sensor
-  water_level:
+  water:
     min: 0      # Raw value when empty
     max: 65535  # Raw value when full
 
@@ -56,3 +72,90 @@ calibration:
 sensors:
   # Enable DHT22 temperature/humidity sensor
   enable_dht22: true
+  
+  # ADC sampling configuration
+  adc_samples: 8
+  adc_sample_delay: 0.01
+
+# Queue configuration (Offline operation)
+queue:
+  # Enable offline queue (stores data when network is unavailable)
+  enabled: true
+  
+  # Maximum age of queued entries (in hours)
+  max_age_hours: 24
+  
+  # Maximum number of sensor entries (~1 day at 15s intervals)
+  max_sensor_entries: 6000
+  
+  # Maximum number of image entries (~1 day at 15m intervals)
+  max_image_entries: 100
+  
+  # Cleanup interval (in seconds)
+  cleanup_interval: 3600  # 1 hour
+
+# Retry configuration (Exponential backoff)
+retry:
+  # Maximum number of retry attempts
+  max_attempts: 6
+  
+  # Initial delay between retries (in seconds)
+  initial_delay: 1.0
+  
+  # Maximum delay between retries (in seconds)
+  max_delay: 32.0
+  
+  # Jitter factor (±percentage to prevent thundering herd)
+  jitter: 0.25  # ±25%
+
+# Circuit breaker configuration (Prevent cascading failures)
+circuit_breaker:
+  # Number of consecutive failures before opening circuit
+  failure_threshold: 5
+  
+  # Time to wait before attempting recovery (in seconds)
+  recovery_timeout: 60
+  
+  # Number of consecutive successes needed to close circuit
+  success_threshold: 2
+
+# Logging configuration (Structured JSON logs)
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  
+  # Log format (json or text)
+  format: "json"
+  
+  # Log file path
+  file: "/var/log/growmate/growmate.log"
+  
+  # Maximum log file size (in bytes, 10MB)
+  max_bytes: 10485760
+  
+  # Number of backup log files to keep
+  backup_count: 5
+  
+  # Per-module log levels (hot-reloadable)
+  modules:
+    sensors: "INFO"
+    camera: "INFO"
+    api_client: "INFO"
+    queue: "INFO"
+    scheduler: "INFO"
+    actuators: "INFO"
+    network: "INFO"
+
+# Feature flags
+features:
+  # Enable offline queue
+  offline_queue: true
+  
+  # Enable hot-reload (config changes without restart)
+  hot_reload: true
+  
+  # Enable structured JSON logging
+  structured_logging: true
+  
+  # Enable circuit breaker
+  circuit_breaker: true

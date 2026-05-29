@@ -656,7 +656,7 @@ libcamera-apps, hostapd, dnsmasq
 
 ```bash
 # On fresh Raspberry Pi OS
-curl -sSL https://raw.githubusercontent.com/USER/rpi-growmate-pods/main/scripts/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/FarelRA/rpi-growmate-pods/main/scripts/install.sh | bash
 
 # Script installs dependencies, clones repo, configures system, sets up services
 # Reboot → AP mode → User configures via web portal → Client mode → Normal operation

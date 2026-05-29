@@ -1,386 +1,110 @@
-# GrowMate Pods - Raspberry Pi Zero W
+# GrowMate Pods
 
-IoT plant monitoring system with sensors, camera, cloud API integration, and actuator control. Port of ESP32-CAM GrowMate firmware to Raspberry Pi Zero W.
+GrowMate Pods is an automated plant monitoring and care system for Raspberry Pi. It watches your plants, takes pictures, and can water them automatically through a simple cloud API.
 
-## Features
+## What It Does
 
-- **Sensor Monitoring**
-  - Soil moisture (analog via ADS1115)
-  - Light level (analog via ADS1115)
-  - Water level (analog via ADS1115)
-  - Temperature and humidity (DHT22)
-  - Configurable calibration for accurate readings
-  - 15-second reading intervals
-
-- **Camera System**
-  - Pi Camera Module v1 (5MP)
-  - JPEG image capture
-  - 15-minute capture intervals
-  - Automatic upload to cloud
-
-- **Cloud Integration**
-  - HTTPS API communication
-  - Sensor data upload (JSON)
-  - Image upload
-  - Command reception from server
-  - Automatic retry with exponential backoff
-
-- **Actuator Control**
-  - Water pump (timed duration control)
-  - Grow light (on/off control)
-  - Cloud-commanded operation
-  - Automatic safety shutoff
-
-- **WiFi Management**
-  - AP mode for initial setup
-  - Web-based configuration portal
-  - Automatic client mode switching
-  - Fallback to AP mode on failures
-
-- **System Reliability**
-  - Systemd service integration
-  - Auto-start on boot
-  - Auto-restart on failure
-  - Comprehensive logging
-  - Graceful error handling
-
-## Hardware Requirements
-
-| Component | Specification | Cost | Notes |
-|-----------|--------------|------|-------|
-| Raspberry Pi Zero W | BCM2835, 512MB RAM, WiFi | $15 | Main controller |
-| Pi Camera Module v1 | 5MP | $15 | CSI interface |
-| ADS1115 ADC | 16-bit, 4-channel, I2C | $5 | **Required** - Pi has no ADC |
-| DHT22 | Temperature/humidity sensor | $5 | Digital (GPIO) |
-| Soil moisture sensor | Analog | $3 | Via ADS1115 A0 |
-| Light sensor | Photoresistor | $2 | Via ADS1115 A1 |
-| Water level sensor | Analog | $3 | Via ADS1115 A2 |
-| 2-channel relay module | 5V | $5 | Pump + light control |
-| MicroSD card | 16GB+ | $8 | OS + storage |
-| Power supply | 5V 2.5A | $8 | Adequate current |
-| **Total** | | **$69** | |
-
-## Pin Assignment
-
-```
-GPIO 2/3   - I2C (SDA/SCL) for ADS1115
-GPIO 4     - DHT22 sensor
-GPIO 17    - Water pump relay
-GPIO 27    - Grow light relay
-CSI port   - Pi Camera Module v1
-```
+- Monitors soil moisture, light levels, temperature, and humidity
+- Takes photos of your plants every 15 minutes
+- Sends all data to your cloud server
+- Waters plants and controls grow lights based on commands from your server
+- Works offline - stores data locally when internet is down
 
 ## Installation
 
-### Prerequisites
-
-- Raspberry Pi Zero W with Raspberry Pi OS Lite installed
-- MicroSD card (16GB+ recommended)
-- All hardware components wired according to pin assignment (see WIRING.md)
-- Internet connection for initial setup
-- SSH access to the Raspberry Pi
-
-### Automated Installation (Recommended)
-
-The automated installation script handles all dependencies, system configuration, and service setup:
+Install GrowMate on your Raspberry Pi with one command:
 
 ```bash
-# Clone repository
-git clone https://github.com/USER/rpi-growmate-pods.git
-cd rpi-growmate-pods
+curl -sSL https://raw.githubusercontent.com/FarelRA/rpi-growmate-pods/main/scripts/install.sh | sudo bash
+```
 
-# Run installation script (requires root)
+Or clone and install manually:
+
+```bash
+git clone https://github.com/FarelRA/rpi-growmate-pods.git
+cd rpi-growmate-pods
 sudo bash scripts/install.sh
 ```
 
-The installation script will:
-- Update system packages
-- Install all system dependencies (Python, I2C tools, camera support, hostapd, dnsmasq)
-- Enable I2C and Camera interfaces
-- Install Python dependencies
-- Copy files to `/opt/growmate`
-- Create configuration directory at `/etc/growmate`
-- Install and enable systemd service
-- Start the GrowMate service automatically
+The installer will set up everything automatically and start the service.
 
-**Note:** The script will prompt for a reboot if I2C or Camera interfaces need to be enabled. After reboot, the service will start automatically.
+## Hardware You'll Need
 
-### One-Line Remote Installation
+- Raspberry Pi Zero W (or any Pi with WiFi)
+- Pi Camera Module
+- Soil moisture sensor
+- Light sensor
+- Temperature/humidity sensor (DHT22)
+- Water pump and relay
+- ADS1115 ADC module (for reading sensors)
 
-For fresh Raspberry Pi installations, you can install directly from GitHub:
+Total cost: around $70
 
-```bash
-curl -sSL https://raw.githubusercontent.com/USER/rpi-growmate-pods/main/scripts/install.sh | sudo bash
-```
+See [docs/HARDWARE.md](docs/HARDWARE.md) for detailed parts list and wiring.
 
-**Warning:** Only run installation scripts from trusted sources.
+## Setup
 
-### Manual Installation
+After installation, connect to the WiFi network `GrowMate-XXXXXX` (password: `growmate`) and open `http://192.168.4.1` in your browser. Enter your WiFi credentials and your API endpoint.
 
-If you prefer to install manually or need to customize the installation:
-
-1. **Update system:**
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
-
-2. **Install system dependencies:**
-   ```bash
-   sudo apt install -y python3 python3-pip python3-dev python3-venv \
-       i2c-tools libgpiod2 python3-libgpiod \
-       libcamera-apps python3-libcamera python3-picamera2 \
-       hostapd dnsmasq build-essential git curl
-   ```
-
-3. **Enable I2C and Camera interfaces:**
-   ```bash
-   sudo raspi-config nonint do_i2c 0
-   sudo raspi-config nonint do_camera 0
-   
-   # Add I2C modules to /etc/modules
-   echo "i2c-dev" | sudo tee -a /etc/modules
-   echo "i2c-bcm2835" | sudo tee -a /etc/modules
-   
-   # Load modules immediately
-   sudo modprobe i2c-dev
-   sudo modprobe i2c-bcm2835
-   ```
-
-4. **Clone repository:**
-   ```bash
-   git clone https://github.com/USER/rpi-growmate-pods.git
-   cd rpi-growmate-pods
-   ```
-
-5. **Install Python dependencies:**
-   ```bash
-   sudo pip3 install -r requirements.txt
-   ```
-
-6. **Copy files to installation directory:**
-   ```bash
-   sudo mkdir -p /opt/growmate
-   sudo cp -r src templates static config /opt/growmate/
-   sudo cp requirements.txt /opt/growmate/
-   ```
-
-7. **Create configuration directory:**
-   ```bash
-   sudo mkdir -p /etc/growmate
-   sudo chmod 755 /etc/growmate
-   ```
-
-8. **Configure AP mode services:**
-   ```bash
-   # Stop and disable hostapd/dnsmasq (app will manage them)
-   sudo systemctl stop hostapd dnsmasq
-   sudo systemctl disable hostapd dnsmasq
-   sudo systemctl unmask hostapd
-   ```
-
-9. **Install and start systemd service:**
-   ```bash
-   sudo cp systemd/growmate.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable growmate
-   sudo systemctl start growmate
-   ```
-
-10. **Verify installation:**
-    ```bash
-    sudo systemctl status growmate
-    sudo journalctl -u growmate -f
-    ```
+That's it! Your GrowMate will start monitoring your plants.
 
 ## Configuration
 
-### Initial Setup (Onboarding)
-
-On first boot, the device enters AP mode:
-
-1. Connect to WiFi network: `GrowMate-XXXXXX`
-2. Password: `growmate`
-3. Open browser: `http://192.168.4.1`
-4. Select your WiFi network
-5. Enter WiFi password
-6. Click "Save and Continue"
-
-The device will automatically connect to your WiFi and begin monitoring.
-
-### Configuration File
-
-Configuration is stored at `/etc/growmate/config.yaml`:
+Edit `/etc/growmate/config.yaml` to customize:
 
 ```yaml
-version: 4
-
-device:
-  id: "growmate-b827eb123456"
-
-network:
-  provisioned: true
-  wifi_ssid: "YourNetwork"
-  wifi_password: "YourPassword"
-
 api:
-  sensor_url: "https://api.example.com/sensors"
-  camera_url: "https://api.example.com/camera"
+  sensor_url: "https://your-api.com/sensors"
+  camera_url: "https://your-api.com/camera"
 
 intervals:
   sensor_reading: 15      # seconds
-  camera_capture: 900     # seconds (15 minutes)
+  camera_capture: 900     # seconds
 
 calibration:
-  soil: {min: 0, max: 65535}
+  soil_moisture: {min: 0, max: 65535}
   light: {min: 0, max: 65535}
-  water: {min: 0, max: 65535}
-
-sensors:
-  enable_dht22: true
 ```
 
-### Sensor Calibration
-
-To calibrate sensors:
-
-1. Read raw values: `sudo python3 /opt/growmate/scripts/test_hardware.py`
-2. Note minimum value (dry/dark/empty)
-3. Note maximum value (wet/bright/full)
-4. Update `/etc/growmate/config.yaml` with calibration values
-5. Restart service: `sudo systemctl restart growmate`
+Restart the service after changes: `sudo systemctl restart growmate`
 
 ## Usage
 
-### Service Management
+### Check Status
 
 ```bash
-# Start service
-sudo systemctl start growmate
-
-# Stop service
-sudo systemctl stop growmate
-
-# Restart service
-sudo systemctl restart growmate
-
-# Check status
 sudo systemctl status growmate
-
-# View logs
-sudo journalctl -u growmate -f
-
-# View recent logs
-sudo journalctl -u growmate -n 100
 ```
 
-### Hardware Testing
+### View Logs
 
-Test all hardware components:
+```bash
+sudo journalctl -u growmate -f
+```
+
+### Test Hardware
 
 ```bash
 sudo python3 /opt/growmate/scripts/test_hardware.py
 ```
 
-This will test:
-- I2C bus and ADS1115 ADC
-- All 3 analog sensors
-- DHT22 sensor
-- Pi Camera
-- GPIO relays (pump, light)
-- Network interface
+## API Format
 
-### Re-entering Onboarding Mode
+Your server receives sensor data as JSON:
 
-If you need to reconfigure WiFi:
-
-1. Edit config: `sudo nano /etc/growmate/config.yaml`
-2. Set `provisioned: false`
-3. Restart: `sudo systemctl restart growmate`
-4. Device will enter AP mode
-
-Or delete the config file:
-```bash
-sudo rm /etc/growmate/config.yaml
-sudo systemctl restart growmate
-```
-
-### Failure Handling and Recovery
-
-The system implements automatic failure recovery matching ESP32 behavior:
-
-**Consecutive Failure Threshold:**
-- System tracks consecutive failures (sensor read, WiFi connect, or upload failures)
-- After **5 consecutive failures**, device automatically re-enters AP mode
-- Allows reconfiguration without physical access
-- Failure counter resets to 0 on any successful operation
-
-**Retry Mechanisms:**
-- **Upload retry:** 2 attempts per operation
-- **WiFi retry:** 4 connection attempts
-- **DHT22 retry:** 2 read attempts with increasing delays
-
-**Graceful Degradation:**
-- If some sensors fail, continues with available sensors
-- If camera fails, logs error and continues sensor readings
-- System never crashes due to hardware failures
-
-**Example Failure Scenario:**
-```
-Cycle 1: Upload failed (consecutive_failures = 1)
-Cycle 2: Upload failed (consecutive_failures = 2)
-Cycle 3: Upload failed (consecutive_failures = 3)
-Cycle 4: Upload success (consecutive_failures = 0) ← Reset
-Cycle 5: Upload failed (consecutive_failures = 1)
-...
-Cycle N: 5 consecutive failures → Re-enter AP mode
-```
-
-**Monitoring Failures:**
-```bash
-# Watch for failure messages in logs
-sudo journalctl -u growmate -f | grep -i "fail\|error"
-
-# Check if device re-entered AP mode
-nmcli device wifi list | grep GrowMate
-```
-
-## API Integration
-
-### Sensor Data Upload
-
-**Endpoint:** Configured in `config.yaml` as `api.sensor_url`
-
-**Method:** `POST`
-
-**Content-Type:** `application/json`
-
-**Request Body:**
 ```json
 {
-  "deviceId": "growmate-b827eb123456",
-  "firmwareVersion": "2.0.0",
+  "deviceId": "growmate-abc123",
   "sensors": [
-    {"kind": "soil", "value": 45, "unit": "%", "raw": 29491},
-    {"kind": "light", "value": 78, "unit": "%", "raw": 51118},
-    {"kind": "water", "value": 92, "unit": "%", "raw": 60292},
-    {"kind": "temperature", "value": 25, "unit": "C"},
-    {"kind": "air", "value": 60, "unit": "%"}
-  ],
-  "currentState": {
-    "pumpEnabled": false,
-    "lightEnabled": false
-  }
+    {"kind": "soil", "value": 45, "unit": "%"},
+    {"kind": "light", "value": 78, "unit": "%"},
+    {"kind": "temperature", "value": 25, "unit": "C"}
+  ]
 }
 ```
 
-**Important Notes:**
-- **ADC sensors** (soil, light, water) include `raw` field with 16-bit ADC value
-- **DHT22 sensors** (temperature, air) do NOT include `raw` field
-- All sensors include `unit` field (%, C)
-- Field names match ESP32 exactly for API compatibility
-- `currentState` uses `pumpEnabled` and `lightEnabled`
+And can send back commands:
 
-**Response:**
 ```json
 {
   "commands": [
@@ -390,202 +114,45 @@ nmcli device wifi list | grep GrowMate
 }
 ```
 
-**Command Types:**
-- `pump`: Run water pump for specified duration (milliseconds)
-- `light`: Turn grow light on/off
-
-### Camera Image Upload
-
-**Endpoint:** Configured in `config.yaml` as `api.camera_url`
-
-**Method:** `POST`
-
-**Content-Type:** `multipart/form-data`
-
-**Headers:**
-- `X-Device-Id: growmate-b827eb123456`
-
-**Form Data:**
-- Field name: `image`
-- Content: JPEG image file
-
-**Example using curl:**
-```bash
-curl -X POST https://api.example.com/camera \
-  -H "X-Device-Id: growmate-b827eb123456" \
-  -F "image=@/tmp/capture.jpg"
-```
+Camera images are uploaded as JPEG files with device ID in the header.
 
 ## Troubleshooting
 
-For comprehensive troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
-
-### Quick Diagnostics
-
-**Service won't start:**
+**Service won't start?**
 ```bash
-sudo systemctl status growmate
 sudo journalctl -u growmate -n 50
 ```
 
-**Sensors not reading:**
+**Sensors not working?**
 ```bash
-sudo i2cdetect -y 1  # Should show 0x48 (ADS1115)
+sudo i2cdetect -y 1
 sudo python3 /opt/growmate/scripts/test_hardware.py
 ```
 
-**Camera not working:**
-```bash
-libcamera-hello  # Test camera
-sudo raspi-config  # Enable camera interface
-```
-
-**WiFi connection issues:**
-```bash
-nmcli device status
-sudo journalctl -u growmate | grep -i wifi
-```
-
-**Re-enter onboarding mode:**
+**Need to change WiFi?**
 ```bash
 sudo rm /etc/growmate/config.yaml
 sudo systemctl restart growmate
 ```
 
-**Check for consecutive failures:**
-```bash
-sudo journalctl -u growmate | grep -i "consecutive\|failure"
-```
+For more help, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
-## Development
+## Contributing
 
-### Project Structure
+Pull requests are welcome! For major changes, please open an issue first to discuss what you'd like to change.
 
-```
-rpi-growmate-pods/
-├── src/                    # Python source code
-│   ├── main.py            # Main application
-│   ├── config_manager.py  # Configuration handling
-│   ├── sensors.py         # Sensor reading
-│   ├── camera_service.py  # Camera capture
-│   ├── actuators.py       # Relay control
-│   ├── api_client.py      # API communication
-│   ├── network_manager.py # WiFi management
-│   ├── onboarding_portal.py # Flask web app
-│   └── utils.py           # Utilities
-├── templates/             # HTML templates
-├── static/                # CSS, JS, images
-├── config/                # Configuration templates
-├── systemd/               # Service files
-├── scripts/               # Installation scripts
-├── requirements.txt       # Python dependencies
-├── PLAN.md               # Implementation plan
-└── README.md             # This file
-```
-
-### Running Locally
-
-For development without hardware:
+Please make sure to test your changes:
 
 ```bash
-# Install dependencies
-pip3 install -r requirements.txt
-
-# Run with mock hardware (TODO: implement mocks)
-python3 src/main.py
+python3 scripts/test_system_integration.py
 ```
-
-### Testing
-
-**End-to-End Tests:**
-```bash
-# Run comprehensive integration tests
-python3 scripts/test_e2e.py
-
-# Tests configuration, sensors, camera, API, actuators, onboarding, failure recovery
-# Uses mocking - no hardware required
-```
-
-**Failure Scenario Tests:**
-```bash
-# Run failure handling tests
-python3 scripts/test_failures.py
-
-# Tests network failures, API failures, sensor failures, camera failures,
-# consecutive failure threshold, power cycle recovery
-```
-
-**Hardware Tests:**
-```bash
-# Test actual hardware components (requires Pi with hardware)
-sudo python3 scripts/test_hardware.py
-
-# Tests I2C, ADC, sensors, camera, GPIO relays
-```
-
-**Performance Monitoring:**
-```bash
-# Monitor system performance in real-time
-sudo python3 scripts/monitor_performance.py --continuous
-
-# Monitor for specific duration
-sudo python3 scripts/monitor_performance.py --duration 60 --interval 5
-
-# Log metrics to file
-sudo python3 scripts/monitor_performance.py --output /var/log/growmate-perf.log
-```
-
-**Phase Validation Tests:**
-```bash
-# Run phase-specific validation tests
-python3 scripts/test_modules.py    # Phase 3: Core modules
-python3 scripts/test_phase4.py     # Phase 4: Network & onboarding
-python3 scripts/test_phase5.py     # Phase 5: Main application
-python3 scripts/test_phase6.py     # Phase 6: Service deployment
-python3 scripts/test_phase7.py     # Phase 7: Testing & documentation
-```
-
-## Comparison with ESP32 Version
-
-### Advantages
-
-- 1000x more RAM (512MB vs 520KB)
-- Better camera (5MP vs 2MP)
-- Full Linux OS (easier debugging)
-- Better ADC resolution (16-bit vs 12-bit)
-- More flexible configuration
-
-### Disadvantages
-
-- Requires external ADC module (+$5)
-- Higher power consumption (~150mA vs ~80mA)
-- Higher total cost ($69 vs $40)
-- Longer boot time (30-60s vs 1-2s)
-- More complex AP mode setup
 
 ## License
 
-[Specify your license here]
-
-## Credits
-
-- Original ESP32 implementation: [Link to ESP32 repo]
-- Ported to Raspberry Pi Zero W by [Your name]
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For issues and questions:
-- GitHub Issues: [Repository URL]
-- Documentation: [Link to docs]
-
-## Roadmap
-
-- [x] Add unit tests (Phase 7: test_e2e.py, test_failures.py)
-- [x] Add performance monitoring (Phase 7: monitor_performance.py)
-- [ ] Add mock hardware for development
-- [ ] Add OTA updates
-- [ ] Add web dashboard
-- [ ] Add MQTT support
-- [ ] Add multiple device support
-- [ ] Add data queuing for offline operation
-- [ ] Add local web interface for monitoring
+- Report bugs: [GitHub Issues](https://github.com/FarelRA/rpi-growmate-pods/issues)
+- Ask questions: [GitHub Discussions](https://github.com/FarelRA/rpi-growmate-pods/discussions)
+- Documentation: [docs/](docs/)

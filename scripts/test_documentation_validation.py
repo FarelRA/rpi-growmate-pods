@@ -1,22 +1,18 @@
 #!/usr/bin/env python3
 """
-Phase 7 Validation Script - Testing & Documentation
+Documentation and Project Validation Test Suite
 
-This script validates that all Phase 7 deliverables are complete and meet
-the requirements specified in PLAN.md.
-
-Phase 7 Requirements:
-- End-to-end test results
-- Failure scenario test results
-- Complete README.md
-- Troubleshooting guide
-- Wiring diagram
-- API documentation
-- Code documentation (docstrings)
-- Final validation
+Validates project completeness and documentation quality:
+- Test suite files exist and are executable
+- README.md completeness (features, installation, API, troubleshooting)
+- API documentation format
+- TROUBLESHOOTING.md covers common issues
+- WIRING.md exists for hardware setup
+- Project structure is complete
+- Device compatibility is maintained
 
 Usage:
-    python3 scripts/test_phase7.py
+    python3 scripts/test_documentation_validation.py
 """
 
 import sys
@@ -28,20 +24,20 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
-class TestPhase7Deliverables(unittest.TestCase):
-    """Test that all Phase 7 deliverables exist"""
+class TestProjectDeliverables(unittest.TestCase):
+    """Test that all project deliverables exist"""
     
     def test_end_to_end_test_suite_exists(self):
-        """Test that end-to-end test suite exists"""
-        test_file = PROJECT_ROOT / 'scripts' / 'test_e2e.py'
-        self.assertTrue(test_file.exists(), "test_e2e.py not found")
-        self.assertTrue(os.access(test_file, os.X_OK), "test_e2e.py not executable")
+        """Test that system integration test suite exists"""
+        test_file = PROJECT_ROOT / 'scripts' / 'test_system_integration.py'
+        self.assertTrue(test_file.exists(), "test_system_integration.py not found")
+        self.assertTrue(os.access(test_file, os.X_OK), "test_system_integration.py not executable")
     
-    def test_failure_scenario_test_suite_exists(self):
-        """Test that failure scenario test suite exists"""
-        test_file = PROJECT_ROOT / 'scripts' / 'test_failures.py'
-        self.assertTrue(test_file.exists(), "test_failures.py not found")
-        self.assertTrue(os.access(test_file, os.X_OK), "test_failures.py not executable")
+    def test_failure_recovery_test_suite_exists(self):
+        """Test that failure recovery test suite exists"""
+        test_file = PROJECT_ROOT / 'scripts' / 'test_failure_recovery.py'
+        self.assertTrue(test_file.exists(), "test_failure_recovery.py not found")
+        self.assertTrue(os.access(test_file, os.X_OK), "test_failure_recovery.py not executable")
     
     def test_performance_monitoring_script_exists(self):
         """Test that performance monitoring script exists"""
@@ -106,12 +102,12 @@ class TestREADMECompleteness(unittest.TestCase):
     def test_readme_has_testing_section(self):
         """Test README has Testing section"""
         self.assertIn('### Testing', self.readme_content)
-        self.assertIn('test_e2e.py', self.readme_content)
-        self.assertIn('test_failures.py', self.readme_content)
+        self.assertIn('test_system_integration.py', self.readme_content)
+        self.assertIn('test_failure_recovery.py', self.readme_content)
 
 
 class TestAPIDocumentation(unittest.TestCase):
-    """Test that API documentation matches ESP32"""
+    """Test that API documentation is complete"""
     
     def setUp(self):
         """Load README.md content"""
@@ -126,9 +122,9 @@ class TestAPIDocumentation(unittest.TestCase):
         self.assertIn('sensors', self.readme_content)
         self.assertIn('currentState', self.readme_content)
     
-    def test_api_sensor_kinds_match_esp32(self):
-        """Test sensor kinds match ESP32 format"""
-        # ESP32 uses: soil, light, water, temperature, air
+    def test_api_sensor_kinds_format(self):
+        """Test sensor kinds match expected format"""
+        # Expected format: soil, light, water, temperature, air
         self.assertIn('"kind": "soil"', self.readme_content)
         self.assertIn('"kind": "water"', self.readme_content)
         self.assertIn('"kind": "air"', self.readme_content)
@@ -223,11 +219,11 @@ class TestTestSuites(unittest.TestCase):
             self.fail(f"monitor_performance.py has syntax error: {e}")
 
 
-class TestESP32Compatibility(unittest.TestCase):
-    """Test that ESP32 compatibility is maintained"""
+class TestDeviceCompatibility(unittest.TestCase):
+    """Test that device compatibility is maintained"""
     
     def test_consecutive_failure_threshold(self):
-        """Test consecutive failure threshold is 5 (matches ESP32)"""
+        """Test consecutive failure threshold is 5"""
         readme_path = PROJECT_ROOT / 'README.md'
         with open(readme_path, 'r') as f:
             readme_content = f.read()
@@ -236,7 +232,7 @@ class TestESP32Compatibility(unittest.TestCase):
         self.assertIn('5 consecutive failures', readme_content)
     
     def test_sensor_interval_default(self):
-        """Test sensor interval default is 15 seconds (matches ESP32)"""
+        """Test sensor interval default is 15 seconds"""
         config_example = PROJECT_ROOT / 'config' / 'config.yaml.example'
         if config_example.exists():
             with open(config_example, 'r') as f:
@@ -244,7 +240,7 @@ class TestESP32Compatibility(unittest.TestCase):
             self.assertIn('sensor_reading: 15', config_content)
     
     def test_camera_interval_default(self):
-        """Test camera interval default is 900 seconds (matches ESP32)"""
+        """Test camera interval default is 900 seconds"""
         config_example = PROJECT_ROOT / 'config' / 'config.yaml.example'
         if config_example.exists():
             with open(config_example, 'r') as f:
@@ -318,12 +314,12 @@ class TestProjectStructure(unittest.TestCase):
 
 
 def run_tests():
-    """Run all Phase 7 validation tests"""
+    """Run all documentation and project validation tests"""
     print("=" * 70)
-    print("GrowMate Raspberry Pi Port - Phase 7 Validation")
+    print("GrowMate Raspberry Pi Port - Documentation & Project Validation")
     print("=" * 70)
     print()
-    print("Validating Phase 7 deliverables...")
+    print("Validating project completeness and documentation quality...")
     print()
     
     # Create test suite
@@ -331,12 +327,12 @@ def run_tests():
     suite = unittest.TestSuite()
     
     # Add all test classes
-    suite.addTests(loader.loadTestsFromTestCase(TestPhase7Deliverables))
+    suite.addTests(loader.loadTestsFromTestCase(TestProjectDeliverables))
     suite.addTests(loader.loadTestsFromTestCase(TestREADMECompleteness))
     suite.addTests(loader.loadTestsFromTestCase(TestAPIDocumentation))
     suite.addTests(loader.loadTestsFromTestCase(TestTroubleshootingGuide))
     suite.addTests(loader.loadTestsFromTestCase(TestTestSuites))
-    suite.addTests(loader.loadTestsFromTestCase(TestESP32Compatibility))
+    suite.addTests(loader.loadTestsFromTestCase(TestDeviceCompatibility))
     suite.addTests(loader.loadTestsFromTestCase(TestProjectStructure))
     
     # Run tests
@@ -346,7 +342,7 @@ def run_tests():
     # Print summary
     print()
     print("=" * 70)
-    print("Phase 7 Validation Summary")
+    print("Documentation & Project Validation Summary")
     print("=" * 70)
     print(f"Tests run: {result.testsRun}")
     print(f"Successes: {result.testsRun - len(result.failures) - len(result.errors)}")
@@ -355,19 +351,19 @@ def run_tests():
     print()
     
     if result.wasSuccessful():
-        print("✓ Phase 7 validation passed!")
+        print("✓ Documentation and project validation passed!")
         print()
-        print("Phase 7 Deliverables Complete:")
-        print("  ✓ End-to-end test suite (test_e2e.py)")
-        print("  ✓ Failure scenario test suite (test_failures.py)")
+        print("Project Deliverables Complete:")
+        print("  ✓ System integration test suite (test_system_integration.py)")
+        print("  ✓ Failure recovery test suite (test_failure_recovery.py)")
         print("  ✓ Performance monitoring script (monitor_performance.py)")
         print("  ✓ Complete README.md with API documentation")
         print("  ✓ Comprehensive TROUBLESHOOTING.md guide")
         print("  ✓ Wiring diagram (WIRING.md)")
-        print("  ✓ ESP32 compatibility maintained")
+        print("  ✓ Device compatibility maintained")
         print("  ✓ Project structure complete")
         print()
-        print("Phase 7: Testing & Documentation - COMPLETE")
+        print("Documentation & Testing - COMPLETE")
         return 0
     else:
         print("✗ Some validation tests failed. See details above.")

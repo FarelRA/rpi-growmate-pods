@@ -11,7 +11,7 @@
 #   sudo ./install.sh
 #
 # Or remote installation:
-#   curl -sSL https://raw.githubusercontent.com/USER/rpi-growmate-pods/main/scripts/install.sh | sudo bash
+#   curl -sSL https://raw.githubusercontent.com/FarelRA/rpi-growmate-pods/main/scripts/install.sh | sudo bash
 #
 
 set -e  # Exit on any error

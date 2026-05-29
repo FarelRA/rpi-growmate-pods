@@ -3,39 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="GrowMate device successfully configured">
     <title>GrowMate - Configuration Saved</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <div class="header">
+        <header class="header">
             <h1>✓ Configuration Saved</h1>
             <p class="subtitle">Your GrowMate device is now configured</p>
-        </div>
+        </header>
 
-        <div class="card success-card">
-            <h2>What happens next?</h2>
-            <ol class="steps-list">
-                <li>Your device will connect to the configured WiFi network</li>
-                <li>Sensors will begin monitoring your plants</li>
-                <li>Data will be uploaded to the cloud every 15 seconds</li>
-                <li>Camera images will be captured every 15 minutes</li>
-            </ol>
-        </div>
+        <main>
+            <section class="card success-card" aria-labelledby="next-steps">
+                <h2 id="next-steps">What happens next?</h2>
+                <ol class="steps-list">
+                    <li>Your device will connect to the configured WiFi network</li>
+                    <li>Sensors will begin monitoring your plants</li>
+                    <li>Data will be uploaded to the cloud every 15 seconds</li>
+                    <li>Camera images will be captured every 15 minutes</li>
+                </ol>
+            </section>
 
-        <div class="card">
-            <h2>Troubleshooting</h2>
-            <p>If your device doesn't connect within a few minutes:</p>
-            <ul>
-                <li>Check that the WiFi password is correct</li>
-                <li>Ensure your WiFi network is 2.4GHz (not 5GHz)</li>
-                <li>Power cycle the device to re-enter setup mode</li>
-            </ul>
-        </div>
+            <section class="card" aria-labelledby="troubleshooting">
+                <h2 id="troubleshooting">Troubleshooting</h2>
+                <p>If your device doesn't connect within a few minutes:</p>
+                <ul>
+                    <li>Check that the WiFi password is correct</li>
+                    <li>Ensure your WiFi network is 2.4GHz (not 5GHz)</li>
+                    <li>Power cycle the device to re-enter setup mode</li>
+                </ul>
+            </section>
+        </main>
 
-        <div class="footer">
+        <footer class="footer">
             <p>You can now close this window.</p>
-        </div>
+        </footer>
     </div>
 </body>
 </html>

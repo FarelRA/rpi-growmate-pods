@@ -5,19 +5,34 @@ Handles HTTPS communication with cloud backend:
 - Upload sensor data (JSON)
 - Upload camera images (JPEG)
 - Receive and parse commands from server
+
+Converted to async with aiohttp for better performance and concurrency.
+Added circuit breaker and exponential backoff for robust error handling.
+Added correlation IDs to request headers for tracing operations.
 """
 
+import asyncio
 import logging
-import requests
-from typing import Dict, List, Optional, Tuple
-from utils import retry, FIRMWARE_VERSION, API_TIMEOUT_SENSOR, API_TIMEOUT_CAMERA
+import aiohttp
+from typing import Dict, List, Optional
+from utils import FIRMWARE_VERSION, API_TIMEOUT_SENSOR, API_TIMEOUT_CAMERA
+from circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
+from retry_handler import (
+    RetryHandler,
+    exponential_backoff_retry,
+    categorize_error,
+    ErrorCategory,
+    PermanentError,
+    RateLimitError
+)
+from logging_config import get_correlation_id
 
 
 logger = logging.getLogger("growmate.api")
 
 
 class APIClient:
-    """Handles API communication with GrowMate cloud backend."""
+    """Handles async API communication with GrowMate cloud backend."""
     
     def __init__(self, config: Dict):
         """
@@ -31,14 +46,102 @@ class APIClient:
         self.sensor_url = config.get('api', {}).get('sensor_url')
         self.camera_url = config.get('api', {}).get('camera_url')
         
+        # Persistent session for connection pooling (RPI optimization)
+        self.session: Optional[aiohttp.ClientSession] = None
+        
+        # Circuit breakers (one per endpoint)
+        cb_config = config.get('circuit_breaker', {})
+        self.sensor_circuit_breaker = CircuitBreaker(
+            name="sensor_api",
+            failure_threshold=cb_config.get('failure_threshold', 5),
+            recovery_timeout=cb_config.get('recovery_timeout', 60.0),
+            success_threshold=cb_config.get('success_threshold', 2)
+        )
+        self.camera_circuit_breaker = CircuitBreaker(
+            name="camera_api",
+            failure_threshold=cb_config.get('failure_threshold', 5),
+            recovery_timeout=cb_config.get('recovery_timeout', 60.0),
+            success_threshold=cb_config.get('success_threshold', 2)
+        )
+        
+        # Retry handler with exponential backoff
+        retry_config = config.get('retry', {})
+        self.retry_handler = RetryHandler(
+            max_attempts=retry_config.get('max_attempts', 6),
+            initial_delay=retry_config.get('initial_delay', 1.0),
+            max_delay=retry_config.get('max_delay', 32.0),
+            jitter=retry_config.get('jitter', 0.25)
+        )
+        
         logger.info(f"API client initialized for device: {self.device_id}")
     
-    @retry(max_attempts=2, delay_seconds=1.5)
-    def upload_sensor_data(self, sensors: List[Dict], current_state: Dict) -> Optional[List[Dict]]:
+    def update_retry_config(self, retry_config: Dict):
+        """
+        Update retry handler configuration (Hot-reload support).
+        
+        Args:
+            retry_config: New retry configuration dictionary
+        """
+        self.retry_handler.update_config(
+            max_attempts=retry_config.get('max_attempts'),
+            initial_delay=retry_config.get('initial_delay'),
+            max_delay=retry_config.get('max_delay'),
+            jitter=retry_config.get('jitter')
+        )
+    
+    def update_circuit_breaker_config(self, cb_config: Dict):
+        """
+        Update circuit breaker configuration (Hot-reload support).
+        
+        Args:
+            cb_config: New circuit breaker configuration dictionary
+        """
+        self.sensor_circuit_breaker.update_config(
+            failure_threshold=cb_config.get('failure_threshold'),
+            recovery_timeout=cb_config.get('recovery_timeout'),
+            success_threshold=cb_config.get('success_threshold')
+        )
+        self.camera_circuit_breaker.update_config(
+            failure_threshold=cb_config.get('failure_threshold'),
+            recovery_timeout=cb_config.get('recovery_timeout'),
+            success_threshold=cb_config.get('success_threshold')
+        )
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self.initialize()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.cleanup()
+    
+    async def initialize(self):
+        """Initialize HTTP session with connection pooling."""
+        if self.session is None:
+            # Create session with connection pooling
+            timeout = aiohttp.ClientTimeout(total=60)
+            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+            self.session = aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector
+            )
+            logger.info("HTTP session initialized with connection pooling")
+    
+    async def cleanup(self):
+        """Clean up HTTP session."""
+        if self.session:
+            await self.session.close()
+            self.session = None
+            logger.info("HTTP session closed")
+    
+    async def upload_sensor_data(self, sensors: List[Dict], current_state: Dict) -> Optional[List[Dict]]:
         """
         Upload sensor data to API and receive commands.
         
-        Request format (from ESP32 analysis):
+        Uses circuit breaker and exponential backoff for robust error handling.
+        
+        Request format:
         {
           "deviceId": "IAET01",
           "firmwareVersion": "2.0.0",
@@ -71,6 +174,10 @@ class APIClient:
             logger.error("Sensor API URL not configured")
             return None
         
+        # Ensure session is initialized
+        if not self.session:
+            await self.initialize()
+        
         # Build payload
         payload = {
             'deviceId': self.device_id,
@@ -79,41 +186,67 @@ class APIClient:
             'currentState': current_state
         }
         
-        try:
-            logger.info(f"Uploading sensor data: {len(sensors)} sensors")
+        # Define upload function
+        async def _upload():
+            logger.debug(f"Uploading sensor data: {len(sensors)} sensors")
             
-            response = requests.post(
+            # Add correlation ID to headers for tracing
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Correlation-Id': get_correlation_id() or 'none'
+            }
+            
+            async with self.session.post(
                 self.sensor_url,
                 json=payload,
-                headers={'Content-Type': 'application/json'},
-                timeout=API_TIMEOUT_SENSOR
-            )
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=API_TIMEOUT_SENSOR)
+            ) as response:
+                # Check for rate limit
+                if response.status == 429:
+                    raise RateLimitError(f"Rate limit exceeded (429)")
+                
+                # Check for permanent errors (4xx except 429)
+                if 400 <= response.status < 500:
+                    raise PermanentError(f"Client error: {response.status}")
+                
+                # Raise for other errors (5xx, etc.)
+                response.raise_for_status()
+                
+                # Parse response
+                data = await response.json()
+                commands = data.get('commands', [])
+                
+                logger.info(f"Sensor upload successful, received {len(commands)} commands")
+                return commands
+        
+        # Execute with circuit breaker and retry handler
+        try:
+            # Wrap with circuit breaker
+            async def _upload_with_circuit_breaker():
+                return await self.sensor_circuit_breaker.call(_upload)
             
-            response.raise_for_status()
-            
-            # Parse response
-            data = response.json()
-            commands = data.get('commands', [])
-            
-            logger.info(f"Sensor upload successful, received {len(commands)} commands")
+            # Execute with retry handler
+            commands = await self.retry_handler.execute(_upload_with_circuit_breaker)
             return commands
             
-        except requests.exceptions.Timeout:
-            logger.error("Sensor upload timeout")
-            raise
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Sensor upload failed: {e}")
-            raise
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Sensor upload rejected: circuit breaker open")
+            return None
+        except PermanentError as e:
+            logger.error(f"Sensor upload failed: permanent error: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Unexpected error during sensor upload: {e}")
-            raise
+            logger.error(f"Sensor upload failed after all retries: {e}")
+            return None
     
-    @retry(max_attempts=2, delay_seconds=1.5)
-    def upload_camera_image(self, image_bytes: bytes) -> bool:
+    async def upload_camera_image(self, image_bytes: bytes) -> bool:
         """
         Upload camera image to API.
         
-        Request format (from ESP32 analysis):
+        Uses circuit breaker and exponential backoff for robust error handling.
+        
+        Request format:
         - Content-Type: image/jpeg
         - X-Device-Id: {device_id}
         - Body: raw JPEG bytes
@@ -128,37 +261,91 @@ class APIClient:
             logger.error("Camera API URL not configured")
             return False
         
-        try:
-            logger.info(f"Uploading camera image: {len(image_bytes)} bytes")
+        # Ensure session is initialized
+        if not self.session:
+            await self.initialize()
+        
+        # Define upload function
+        async def _upload():
+            logger.debug(f"Uploading camera image: {len(image_bytes)} bytes")
             
-            response = requests.post(
+            # Add correlation ID to headers for tracing
+            headers = {
+                'Content-Type': 'image/jpeg',
+                'X-Device-Id': self.device_id,
+                'X-Correlation-Id': get_correlation_id() or 'none'
+            }
+            
+            async with self.session.post(
                 self.camera_url,
                 data=image_bytes,
-                headers={
-                    'Content-Type': 'image/jpeg',
-                    'X-Device-Id': self.device_id
-                },
-                timeout=API_TIMEOUT_CAMERA
-            )
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=API_TIMEOUT_CAMERA)
+            ) as response:
+                # Check for rate limit
+                if response.status == 429:
+                    raise RateLimitError(f"Rate limit exceeded (429)")
+                
+                # Check for permanent errors (4xx except 429)
+                if 400 <= response.status < 500:
+                    raise PermanentError(f"Client error: {response.status}")
+                
+                # Raise for other errors (5xx, etc.)
+                response.raise_for_status()
+                
+                logger.info("Camera upload successful")
+                return True
+        
+        # Execute with circuit breaker and retry handler
+        try:
+            # Wrap with circuit breaker
+            async def _upload_with_circuit_breaker():
+                return await self.camera_circuit_breaker.call(_upload)
             
-            response.raise_for_status()
+            # Execute with retry handler
+            success = await self.retry_handler.execute(_upload_with_circuit_breaker)
+            return success
             
-            logger.info("Camera upload successful")
-            return True
-            
-        except requests.exceptions.Timeout:
-            logger.error("Camera upload timeout")
-            raise
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Camera upload failed: {e}")
-            raise
+        except CircuitBreakerOpenError as e:
+            logger.warning(f"Camera upload rejected: circuit breaker open")
+            return False
+        except PermanentError as e:
+            logger.error(f"Camera upload failed: permanent error: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Unexpected error during camera upload: {e}")
-            raise
+            logger.error(f"Camera upload failed after all retries: {e}")
+            return False
+    
+    def get_circuit_breaker_stats(self) -> Dict:
+        """
+        Get circuit breaker statistics.
+        
+        Returns:
+            Dictionary with circuit breaker stats for both endpoints
+        """
+        return {
+            'sensor_api': self.sensor_circuit_breaker.get_stats(),
+            'camera_api': self.camera_circuit_breaker.get_stats()
+        }
+    
+    def get_retry_stats(self) -> Dict:
+        """
+        Get retry handler statistics.
+        
+        Returns:
+            Dictionary with retry stats
+        """
+        return self.retry_handler.get_stats()
+    
+    def reset_circuit_breakers(self):
+        """Reset all circuit breakers to closed state."""
+        self.sensor_circuit_breaker.reset()
+        self.camera_circuit_breaker.reset()
+        logger.info("All circuit breakers reset")
 
 
-# Convenience functions
-def upload_sensors(config: Dict, sensors: List[Dict], current_state: Dict) -> Optional[List[Dict]]:
+# Convenience functions (async versions)
+async def upload_sensors(config: Dict, sensors: List[Dict], current_state: Dict) -> Optional[List[Dict]]:
     """
     Upload sensor data and return commands.
     
@@ -170,11 +357,11 @@ def upload_sensors(config: Dict, sensors: List[Dict], current_state: Dict) -> Op
     Returns:
         List of commands or None on failure
     """
-    client = APIClient(config)
-    return client.upload_sensor_data(sensors, current_state)
+    async with APIClient(config) as client:
+        return await client.upload_sensor_data(sensors, current_state)
 
 
-def upload_image(config: Dict, image_bytes: bytes) -> bool:
+async def upload_image(config: Dict, image_bytes: bytes) -> bool:
     """
     Upload camera image.
     
@@ -185,5 +372,5 @@ def upload_image(config: Dict, image_bytes: bytes) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    client = APIClient(config)
-    return client.upload_camera_image(image_bytes)
+    async with APIClient(config) as client:
+        return await client.upload_camera_image(image_bytes)

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Phase 6 Test Script - Service Deployment Verification
+Service Deployment Verification Test Suite
 
-This script validates the Phase 6 deliverables:
-- Systemd service file configuration
-- Installation script structure
-- Service deployment readiness
+Validates systemd service configuration and installation scripts:
+- Systemd service file structure and configuration
+- Installation script completeness (dependencies, I2C/camera setup, AP mode)
+- device compatibility (single service, auto-restart, no timeouts)
+- Deployment readiness (all required files present)
 
-Note: This script validates the FILES, not the actual installation.
+Note: This script validates the deployment FILES, not the actual installation.
 Actual installation testing must be done on a Raspberry Pi.
 """
 
@@ -212,9 +213,9 @@ def test_install_script():
     
     return all_passed
 
-def test_esp32_compatibility():
-    """Test ESP32 compatibility requirements"""
-    print_header("Testing ESP32 Compatibility")
+def test_device_compatibility():
+    """Test device compatibility requirements"""
+    print_header("Testing Device Compatibility")
     
     service_file = "systemd/growmate.service"
     
@@ -222,20 +223,20 @@ def test_esp32_compatibility():
         service_content = f.read()
     
     # Test 1: Single service (not separate onboarding service)
-    # ESP32 handles onboarding in main application
+    # Onboarding is handled in main application
     single_service = True  # We only have growmate.service
     print_test(
-        "Single service (matches ESP32 unified approach)",
+        "Single service (unified approach)",
         single_service,
-        "ESP32 handles onboarding in main app, not separate service"
+        "Onboarding handled in main app, not separate service"
     )
     
     # Test 2: Service runs continuously (Restart=always)
     runs_continuously = 'Restart=always' in service_content
     print_test(
-        "Service runs continuously (matches ESP32)",
+        "Service runs continuously",
         runs_continuously,
-        "ESP32 runs in infinite loop, service should auto-restart"
+        "Application runs in infinite loop, service should auto-restart"
     )
     
     # Test 3: Service starts after network
@@ -243,15 +244,15 @@ def test_esp32_compatibility():
     print_test(
         "Service starts after network available",
         starts_after_network,
-        "ESP32 needs network for WiFi operations"
+        "Application needs network for WiFi operations"
     )
     
     # Test 4: Configuration directory exists
     config_dir_in_install = '/etc/growmate' in open('scripts/install.sh').read()
     print_test(
-        "Configuration directory /etc/growmate (matches ESP32 NVS)",
+        "Configuration directory /etc/growmate",
         config_dir_in_install,
-        "ESP32 stores config in NVS, we use /etc/growmate/config.yaml"
+        "Configuration stored in /etc/growmate/config.yaml"
     )
     
     # Test 5: No timeout in AP mode
@@ -259,17 +260,17 @@ def test_esp32_compatibility():
     install_content = open('scripts/install.sh').read()
     no_ap_timeout = 'timeout' not in install_content.lower() or 'ap' not in install_content.lower()
     print_test(
-        "No AP mode timeout (matches ESP32 indefinite wait)",
+        "No AP mode timeout (indefinite wait)",
         True,  # This is handled in main.py
-        "ESP32 waits indefinitely in AP mode until configured"
+        "System waits indefinitely in AP mode until configured"
     )
     
     # Test 6: Service auto-starts on boot
     auto_start = 'systemctl enable' in install_content
     print_test(
-        "Service auto-starts on boot (matches ESP32)",
+        "Service auto-starts on boot",
         auto_start,
-        "ESP32 starts automatically on power-up"
+        "Service starts automatically on power-up"
     )
     
     # Test 7: Failure recovery (RestartSec)
@@ -325,10 +326,10 @@ def test_deployment_readiness():
     return all_passed
 
 def main():
-    """Run all Phase 6 tests"""
+    """Run all service deployment tests"""
     print(f"\n{BLUE}╔════════════════════════════════════════════════════════════╗{RESET}")
     print(f"{BLUE}║                                                            ║{RESET}")
-    print(f"{BLUE}║         Phase 6 Test Suite - Service Deployment           ║{RESET}")
+    print(f"{BLUE}║      Service Deployment Verification Test Suite           ║{RESET}")
     print(f"{BLUE}║                                                            ║{RESET}")
     print(f"{BLUE}╚════════════════════════════════════════════════════════════╝{RESET}\n")
     
@@ -337,7 +338,7 @@ def main():
     # Run all test suites
     results['systemd_service'] = test_systemd_service_file()
     results['install_script'] = test_install_script()
-    results['esp32_compatibility'] = test_esp32_compatibility()
+    results['device_compatibility'] = test_device_compatibility()
     results['deployment_readiness'] = test_deployment_readiness()
     
     # Print summary
@@ -353,12 +354,12 @@ def main():
     print(f"\n{BLUE}Overall: {passed_suites}/{total_suites} test suites passed{RESET}\n")
     
     if passed_suites == total_suites:
-        print(f"{GREEN}✓ Phase 6 validation PASSED - Ready for deployment!{RESET}\n")
+        print(f"{GREEN}✓ Service deployment validation PASSED - Ready for deployment!{RESET}\n")
         print(f"{YELLOW}Note: This validates the deployment files.{RESET}")
         print(f"{YELLOW}Actual installation must be tested on a Raspberry Pi.{RESET}\n")
         return 0
     else:
-        print(f"{RED}✗ Phase 6 validation FAILED - Fix issues before deployment{RESET}\n")
+        print(f"{RED}✗ Service deployment validation FAILED - Fix issues before deployment{RESET}\n")
         return 1
 
 if __name__ == '__main__':

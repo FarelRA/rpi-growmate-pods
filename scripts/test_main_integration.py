@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """
-Test script for Phase 5: Main Application Integration
+Main Application Integration Test Suite
 
-Validates that main.py matches ESP32 behavior exactly.
+Validates that main.py integrates all components correctly and expected behavior:
+- Timing constants (sensor/camera intervals, failure threshold)
+- Loop counter-based timing (not time-based)
+- Ephemeral camera lifecycle (initialize per-cycle, not persistent)
+- Failure tracking and AP mode re-entry
+- Command processing after sensor upload
+- Signal handling for graceful shutdown
+
+This test suite ensures the main application loop behaves correctly.
 """
 
 import sys
@@ -55,48 +63,48 @@ def test_imports():
     return True
 
 
-def test_esp32_timing_constants():
-    """Test that timing constants match ESP32."""
-    print("\n=== Testing ESP32 Timing Constants ===")
+def test_timing_constants():
+    """Test that timing constants have correct values."""
+    print("\n=== Testing Timing Constants ===")
     
     try:
         from utils import SENSOR_INTERVAL_SECONDS, CAMERA_INTERVAL_SECONDS, FAILURE_THRESHOLD
         
-        # ESP32 values from analysis
-        ESP32_SENSOR_INTERVAL = 15
-        ESP32_CAMERA_INTERVAL = 900
-        ESP32_FAILURE_THRESHOLD = 5
+        # Expected values from requirements
+        EXPECTED_SENSOR_INTERVAL = 15
+        EXPECTED_CAMERA_INTERVAL = 900
+        EXPECTED_FAILURE_THRESHOLD = 5
         
         test_result(
-            "Sensor interval matches ESP32",
-            SENSOR_INTERVAL_SECONDS == ESP32_SENSOR_INTERVAL,
-            f"Expected {ESP32_SENSOR_INTERVAL}s, got {SENSOR_INTERVAL_SECONDS}s"
+            "Sensor interval",
+            SENSOR_INTERVAL_SECONDS == EXPECTED_SENSOR_INTERVAL,
+            f"Expected {EXPECTED_SENSOR_INTERVAL}s, got {SENSOR_INTERVAL_SECONDS}s"
         )
         
         test_result(
-            "Camera interval matches ESP32",
-            CAMERA_INTERVAL_SECONDS == ESP32_CAMERA_INTERVAL,
-            f"Expected {ESP32_CAMERA_INTERVAL}s, got {CAMERA_INTERVAL_SECONDS}s"
+            "Camera interval",
+            CAMERA_INTERVAL_SECONDS == EXPECTED_CAMERA_INTERVAL,
+            f"Expected {EXPECTED_CAMERA_INTERVAL}s, got {CAMERA_INTERVAL_SECONDS}s"
         )
         
         test_result(
-            "Failure threshold matches ESP32",
-            FAILURE_THRESHOLD == ESP32_FAILURE_THRESHOLD,
-            f"Expected {ESP32_FAILURE_THRESHOLD}, got {FAILURE_THRESHOLD}"
+            "Failure threshold",
+            FAILURE_THRESHOLD == EXPECTED_FAILURE_THRESHOLD,
+            f"Expected {EXPECTED_FAILURE_THRESHOLD}, got {FAILURE_THRESHOLD}"
         )
         
-        # Calculate camera period (ESP32: APP_CAMERA_INTERVAL_SEC / APP_SENSOR_INTERVAL_SEC)
+        # Calculate camera period
         camera_period = CAMERA_INTERVAL_SECONDS // SENSOR_INTERVAL_SECONDS
         expected_period = 60  # 900 / 15 = 60
         
         test_result(
-            "Camera period calculation matches ESP32",
+            "Camera period calculation",
             camera_period == expected_period,
             f"Expected {expected_period} cycles, got {camera_period} cycles"
         )
         
     except Exception as e:
-        test_result("ESP32 timing constants", False, str(e))
+        test_result("Timing constants", False, str(e))
 
 
 def test_app_structure():
@@ -131,8 +139,8 @@ def test_app_structure():
 
 
 def test_state_tracking():
-    """Test that state tracking uses loop counter (ESP32 behavior)."""
-    print("\n=== Testing State Tracking (ESP32 Compatibility) ===")
+    """Test that state tracking uses loop counter (expected behavior)."""
+    print("\n=== Testing State Tracking (Device Compatibility) ===")
     
     try:
         # Read main.py source to verify implementation
@@ -144,7 +152,7 @@ def test_state_tracking():
         test_result(
             "Uses loop counter (loops_since_camera)",
             has_loops_since_camera,
-            "Matches ESP32 loop counter approach"
+            "Matches loop counter approach"
         )
         
         # Check that old time-based approach is removed
@@ -158,17 +166,17 @@ def test_state_tracking():
         # Check for camera period calculation
         has_camera_period = 'camera_period = CAMERA_INTERVAL_SECONDS // SENSOR_INTERVAL_SECONDS' in content
         test_result(
-            "Camera period calculation matches ESP32",
+            "Camera period calculation ",
             has_camera_period,
-            "Uses integer division like ESP32"
+            "Uses integer division correctly"
         )
         
         # Check for camera_due logic
         has_camera_due = 'camera_due = self.loops_since_camera >= camera_period' in content
         test_result(
-            "Camera due check matches ESP32",
+            "Camera due check ",
             has_camera_due,
-            "Uses >= comparison like ESP32"
+            "Uses >= comparison correctly"
         )
         
     except Exception as e:
@@ -176,8 +184,8 @@ def test_state_tracking():
 
 
 def test_camera_lifecycle():
-    """Test that camera uses ephemeral lifecycle (ESP32 behavior)."""
-    print("\n=== Testing Camera Lifecycle (ESP32 Compatibility) ===")
+    """Test that camera uses ephemeral lifecycle (expected behavior)."""
+    print("\n=== Testing Camera Lifecycle (Device Compatibility) ===")
     
     try:
         main_py = Path(__file__).parent.parent / 'src' / 'main.py'
@@ -237,8 +245,8 @@ def test_camera_lifecycle():
 
 
 def test_failure_tracking():
-    """Test that failure tracking matches ESP32 behavior."""
-    print("\n=== Testing Failure Tracking (ESP32 Compatibility) ===")
+    """Test that failure tracking  behavior."""
+    print("\n=== Testing Failure Tracking (Device Compatibility) ===")
     
     try:
         main_py = Path(__file__).parent.parent / 'src' / 'main.py'
@@ -265,7 +273,7 @@ def test_failure_tracking():
         test_result(
             "Checks WiFi connection in sensor_cycle",
             has_wifi_check_sensor,
-            "Matches ESP32 WiFi check behavior"
+            "Expected WiFi check behavior"
         )
         
         # Check for WiFi connection check in camera_cycle
@@ -298,8 +306,8 @@ def test_failure_tracking():
 
 
 def test_main_loop_logic():
-    """Test main loop logic matches ESP32."""
-    print("\n=== Testing Main Loop Logic (ESP32 Compatibility) ===")
+    """Test main loop logic ."""
+    print("\n=== Testing Main Loop Logic (Device Compatibility) ===")
     
     try:
         main_py = Path(__file__).parent.parent / 'src' / 'main.py'
@@ -310,7 +318,7 @@ def test_main_loop_logic():
         test_result(
             "Increments loop counter each cycle",
             has_increment,
-            "Matches ESP32: loops_since_camera++"
+            "Expected behavior: loops_since_camera++"
         )
         
         # Check for camera_due calculation
@@ -318,7 +326,7 @@ def test_main_loop_logic():
         test_result(
             "Calculates camera_due correctly",
             has_camera_due,
-            "Matches ESP32: loops_since_camera >= camera_period"
+            "Expected behavior: loops_since_camera >= camera_period"
         )
         
         # Check that sensor_cycle is called every loop
@@ -326,7 +334,7 @@ def test_main_loop_logic():
         test_result(
             "Calls sensor_cycle every loop",
             has_sensor_call,
-            "Matches ESP32: sensor cycle every 15 seconds"
+            "Expected behavior: sensor cycle every 15 seconds"
         )
         
         # Check that camera_cycle is conditional
@@ -342,7 +350,7 @@ def test_main_loop_logic():
         test_result(
             "Resets loop counter only on camera success",
             has_conditional_reset,
-            "Matches ESP32: only reset on successful upload"
+            "Expected behavior: only reset on successful upload"
         )
         
         # Check for failure threshold check
@@ -367,7 +375,7 @@ def test_main_loop_logic():
 
 def test_command_processing():
     """Test that commands are processed immediately after sensor upload."""
-    print("\n=== Testing Command Processing (ESP32 Compatibility) ===")
+    print("\n=== Testing Command Processing (Device Compatibility) ===")
     
     try:
         main_py = Path(__file__).parent.parent / 'src' / 'main.py'
@@ -404,7 +412,7 @@ def test_command_processing():
             test_result(
                 "Processes commands immediately",
                 has_process,
-                "Matches ESP32: apply commands after upload"
+                "Expected behavior: apply commands after upload"
             )
             
             # Check order: upload before process
@@ -522,15 +530,15 @@ def test_signal_handling():
 def print_summary():
     """Print test summary."""
     print("\n" + "=" * 60)
-    print("PHASE 5 TEST SUMMARY")
+    print("MAIN APPLICATION INTEGRATION - TEST SUMMARY")
     print("=" * 60)
     print(f"Tests passed: {tests_passed}")
     print(f"Tests failed: {tests_failed}")
     print(f"Total tests:  {tests_passed + tests_failed}")
     
     if tests_failed == 0:
-        print("\n✓ All tests passed! Phase 5 implementation is complete.")
-        print("\nESP32 Compatibility:")
+        print("\n✓ All tests passed! Main application integration is complete.")
+        print("\nDevice Compatibility:")
         print("  ✓ Loop counter timing (not time-based)")
         print("  ✓ Ephemeral camera lifecycle")
         print("  ✓ Failure tracking and AP mode re-entry")
@@ -546,16 +554,16 @@ def print_summary():
 def main():
     """Run all tests."""
     print("=" * 60)
-    print("PHASE 5: MAIN APPLICATION INTEGRATION - TEST SUITE")
+    print("MAIN APPLICATION INTEGRATION - TEST SUITE")
     print("=" * 60)
-    print("\nValidating ESP32 compatibility and integration...")
+    print("\nValidating device compatibility and integration...")
     
     # Run tests
     if not test_imports():
         print("\n✗ Import tests failed. Cannot continue.")
         return 1
     
-    test_esp32_timing_constants()
+    test_timing_constants()
     test_app_structure()
     test_state_tracking()
     test_camera_lifecycle()

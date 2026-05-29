@@ -1,16 +1,21 @@
 """
-Onboarding portal for GrowMate Pods.
+Onboarding portal for GrowMate Pods - Minimal Web Interface.
 
-Flask web application for device configuration in AP mode.
-Provides web interface for WiFi setup and device configuration.
+Simplified Flask web application for WiFi credentials only.
+Provides minimal web interface for WiFi setup in AP mode.
+
+Features:
+- WiFi credentials only (SSID + password) - user knows their network name
+- Simple blocking Flask server for reliability
+- Clean, minimal design
+- Progressive enhancement: works without JavaScript, enhanced with AJAX
+- Shuts down automatically after successful configuration
 """
 
 import logging
-import threading
-from flask import Flask, request, jsonify, render_template
-from typing import Dict, Any
+from flask import Flask, request, jsonify, render_template, redirect
+from typing import Dict, Optional
 from config_manager import ConfigManager
-from network_manager import NetworkManager
 
 
 logger = logging.getLogger("growmate.onboarding")
@@ -24,10 +29,9 @@ app = Flask(__name__,
 
 # Global configuration manager
 config_manager: ConfigManager = None
-network_manager: NetworkManager = None
 
-# Event to signal onboarding completion (matches ESP32 behavior)
-onboarding_complete_event = threading.Event()
+# Callback to notify main application when onboarding is complete
+onboarding_complete_callback: Optional[callable] = None
 
 
 def init_onboarding(config: Dict):
@@ -37,11 +41,10 @@ def init_onboarding(config: Dict):
     Args:
         config: Configuration dictionary
     """
-    global config_manager, network_manager
+    global config_manager
     config_manager = ConfigManager()
     config_manager.config = config
-    network_manager = NetworkManager(config)
-    logger.info("Onboarding portal initialized")
+    logger.info("Onboarding portal initialized (Minimal WiFi setup)")
 
 
 @app.route('/')
@@ -55,114 +58,100 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/api/config', methods=['GET'])
-def get_config():
-    """
-    Get current device configuration.
-    
-    Returns:
-        JSON response with device ID and WiFi SSID
-    """
-    try:
-        device_id = config_manager.get('device.id', 'unknown')
-        wifi_ssid = config_manager.get('network.wifi_ssid', '')
-        
-        return jsonify({
-            'deviceId': device_id,
-            'wifiSsid': wifi_ssid
-        })
-    except Exception as e:
-        logger.error(f"Failed to get config: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/networks', methods=['GET'])
-def scan_networks():
-    """
-    Scan for available WiFi networks.
-    
-    Returns:
-        JSON response with list of networks (matches ESP32 format)
-    """
-    try:
-        networks = network_manager.scan_networks()
-        
-        # Format for frontend (matches ESP32 format exactly)
-        formatted_networks = [
-            {
-                'ssid': net['ssid'],
-                'rssi': net['rssi'],  # Already in dBm from network_manager
-                'authMode': 3 if net.get('security') else 0
-            }
-            for net in networks
-        ]
-        
-        return jsonify({
-            'networks': formatted_networks
-        })
-    except Exception as e:
-        logger.error(f"Failed to scan networks: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/config', methods=['POST'])
 def save_config():
     """
     Save WiFi configuration from onboarding form.
     
-    Expected JSON payload:
+    Simplified to WiFi credentials only (SSID + password).
+    Supports both JSON (AJAX) and form data (native form submission).
+    
+    Expected JSON payload or form data:
     {
         "wifiSsid": "MyNetwork",
         "wifiPassword": "password123"
     }
     
     Returns:
-        JSON response with success message
+        JSON response for AJAX requests, redirect for form submissions
     """
     try:
-        data = request.get_json()
+        # Support both JSON (AJAX) and form data (native form submission)
+        if request.is_json:
+            data = request.get_json()
+        else:
+            data = request.form.to_dict()
         
         if not data:
-            return jsonify({'error': 'No data provided'}), 400
+            if request.is_json:
+                return jsonify({'error': 'No data provided'}), 400
+            return "No data provided", 400
         
         wifi_ssid = data.get('wifiSsid', '').strip()
         wifi_password = data.get('wifiPassword', '')
         
         # Validate input
         if not wifi_ssid:
-            return jsonify({'error': 'WiFi SSID is required'}), 400
+            error_msg = 'WiFi SSID is required'
+            if request.is_json:
+                return jsonify({'error': error_msg}), 400
+            return error_msg, 400
         
         if len(wifi_ssid) > 32:
-            return jsonify({'error': 'WiFi SSID too long (max 32 chars)'}), 400
+            error_msg = 'WiFi SSID too long (max 32 chars)'
+            if request.is_json:
+                return jsonify({'error': error_msg}), 400
+            return error_msg, 400
         
         if len(wifi_password) > 64:
-            return jsonify({'error': 'WiFi password too long (max 64 chars)'}), 400
+            error_msg = 'WiFi password too long (max 64 chars)'
+            if request.is_json:
+                return jsonify({'error': error_msg}), 400
+            return error_msg, 400
         
         # Update configuration
         config_manager.update_from_onboarding(wifi_ssid, wifi_password)
         config_manager.save()
         
-        logger.info(f"Configuration saved: SSID={wifi_ssid}")
+        logger.info(f"WiFi configuration saved: SSID={wifi_ssid}")
+        logger.info("Onboarding complete, device will connect to WiFi")
         
-        # Signal onboarding completion (matches ESP32 ONBOARDING_COMPLETE_BIT)
-        # The run_onboarding_server() function is waiting on this event
-        onboarding_complete_event.set()
+        # Notify main application (if callback is set)
+        if onboarding_complete_callback:
+            onboarding_complete_callback()
         
-        logger.info("Onboarding complete event set")
+        # Shutdown Flask server after successful configuration
+        _shutdown_server()
         
-        return jsonify({
-            'message': 'Configuration saved. Device will continue with the new settings.'
-        })
+        # Return response
+        if request.is_json:
+            return jsonify({
+                'message': 'Configuration saved. Device will connect to your WiFi network.'
+            })
+        else:
+            # For form submission, return success page
+            return render_template('success.html')
         
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
-        return jsonify({'error': str(e)}), 500
+        if request.is_json:
+            return jsonify({'error': str(e)}), 500
+        return f"Error: {str(e)}", 500
+
+
+def _shutdown_server():
+    """Shutdown Flask server gracefully."""
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        logger.warning("Not running with Werkzeug server, cannot shutdown gracefully")
+    else:
+        func()
 
 
 @app.route('/favicon.ico')
 def favicon():
     """
-    Serve favicon (location pin icon, matches ESP32).
+    Serve favicon (location pin icon).
     
     Returns:
         SVG favicon
@@ -175,50 +164,40 @@ def favicon():
     return svg, 200, {'Content-Type': 'image/svg+xml'}
 
 
-def run_onboarding_server(config: Dict, host: str = '0.0.0.0', port: int = 80):
+def run_onboarding_server(config: Dict, host: str = '0.0.0.0', port: int = 80, callback: Optional[callable] = None):
     """
     Run onboarding web server.
     
-    Blocks until configuration is saved (matches ESP32 behavior).
+    Simplified minimal web interface for WiFi credentials only.
+    No threading, no events - just a simple blocking Flask server.
+    Blocks until configuration is saved, then returns control to main application.
     
     Args:
         config: Configuration dictionary
         host: Host to bind to (default: 0.0.0.0)
         port: Port to bind to (default: 80)
+        callback: Optional callback to call when onboarding is complete
     """
-    global onboarding_complete_event
+    global onboarding_complete_callback
     
-    # Reset event
-    onboarding_complete_event.clear()
+    onboarding_complete_callback = callback
     
     init_onboarding(config)
     
-    logger.info(f"Starting onboarding server on {host}:{port}")
-    logger.info("Waiting for configuration... (matches ESP32 portMAX_DELAY behavior)")
+    logger.info(f"Starting minimal onboarding server on {host}:{port}")
+    logger.info(f"Connect to http://{host} and enter WiFi credentials")
     
-    # Run Flask app in a separate thread
-    server_thread = threading.Thread(
-        target=lambda: app.run(
-            host=host,
-            port=port,
-            debug=False,
-            threaded=True,
-            use_reloader=False
-        ),
-        daemon=True
+    # Run Flask app (blocks until server is shut down from within save_config route)
+    # Simple blocking server - no threading patterns
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        threaded=True,  # Allow multiple concurrent requests
+        use_reloader=False
     )
-    server_thread.start()
     
-    # Wait for onboarding completion (matches ESP32 xEventGroupWaitBits with portMAX_DELAY)
-    onboarding_complete_event.wait()
-    
-    logger.info("Onboarding complete, configuration saved")
-    
-    # Give time for the final HTTP response to be sent before continuing
-    # The Flask server thread is a daemon thread, so it will be terminated
-    # automatically when the main thread continues (matches ESP32 behavior)
-    import time
-    time.sleep(2)
+    logger.info("Onboarding server stopped, WiFi configuration saved")
 
 
 if __name__ == '__main__':

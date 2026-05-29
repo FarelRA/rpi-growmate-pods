@@ -6,10 +6,13 @@ Handles reading from:
 - DHT22 digital sensor (temperature, humidity)
 
 Includes calibration and data formatting for API upload.
+
+Added async wrapper methods to avoid blocking the event loop.
 """
 
 import time
 import logging
+import asyncio
 from typing import Dict, List, Optional, Tuple
 import board
 import busio
@@ -31,7 +34,7 @@ WATER_LEVEL_CHANNEL = 2    # A2
 # DHT22 GPIO pin
 DHT22_PIN = board.D4
 
-# ADC sampling configuration (from ESP32: 8 samples with 10ms delay)
+# ADC sampling configuration
 ADC_SAMPLES = 8
 ADC_SAMPLE_DELAY = 0.01  # 10ms
 
@@ -82,7 +85,7 @@ class SensorReader:
         """
         Read ADC channel with averaging.
         
-        Takes 8 samples with 10ms delay between each (matches ESP32 behavior).
+        Takes 8 samples with 10ms delay between each.
         
         Args:
             channel: AnalogIn channel to read
@@ -110,7 +113,7 @@ class SensorReader:
         """
         Apply calibration to convert raw ADC value to percentage.
         
-        Uses integer division to match ESP32 behavior exactly.
+        Uses integer division for precise calibration calculations.
         
         Args:
             raw_value: Raw ADC value (0-65535)
@@ -127,7 +130,7 @@ class SensorReader:
         if raw_value < 0 or min_val == max_val:
             return -1
         
-        # Apply calibration using integer division (matches ESP32 raw_to_percent)
+        # Apply calibration using integer division
         if min_val < max_val:
             # Normal range: higher raw = higher percentage
             pct = (raw_value - min_val) * 100 // (max_val - min_val)
@@ -214,7 +217,7 @@ class SensorReader:
         """
         Read DHT22 temperature and humidity.
         
-        Implements retry logic from ESP32: retry once with longer delay.
+        Implements retry logic with one retry attempt using a longer delay.
         
         Returns:
             Tuple of (temperature_dict, humidity_dict) or (None, None) on failure
@@ -222,7 +225,7 @@ class SensorReader:
         if not self.dht_device:
             return None, None
         
-        # Try reading with retry (matches ESP32 behavior)
+        # Try reading with retry
         for attempt in range(2):
             try:
                 # Wait before reading (120ms first attempt, 180ms retry)
@@ -233,7 +236,7 @@ class SensorReader:
                 humidity = self.dht_device.humidity
                 
                 if temperature is not None and humidity is not None:
-                    # DHT22 sensors do NOT include 'raw' field (ESP32 compatibility)
+                    # DHT22 sensors do NOT include 'raw' field (digital sensor)
                     temp_data = {
                         'kind': 'temperature',
                         'value': int(round(temperature)),
@@ -261,7 +264,7 @@ class SensorReader:
         """
         Read all available sensors.
         
-        Returns only sensors that successfully returned data (matches ESP32 behavior).
+        Returns only sensors that successfully returned data.
         
         Returns:
             List of sensor data dictionaries
@@ -301,12 +304,28 @@ class SensorReader:
                 pass
         
         logger.info("Sensor cleanup complete")
+    
+    # Async wrapper methods 
+    
+    async def async_read_all_sensors(self) -> List[Dict]:
+        """
+        Async wrapper for read_all_sensors().
+        
+        Runs blocking I/O operations in a thread pool to avoid blocking the event loop.
+        This is the RPI-optimized approach for async architecture.
+        
+        Returns:
+            List of sensor data dictionaries
+        """
+        # Run blocking sensor reads in thread pool
+        return await asyncio.to_thread(self.read_all_sensors)
 
 
-# Convenience function
+# Convenience functions
+
 def read_sensors(config: Dict) -> List[Dict]:
     """
-    Read all sensors and return data list.
+    Read all sensors and return data list (synchronous).
     
     Args:
         config: Configuration dictionary
@@ -317,5 +336,22 @@ def read_sensors(config: Dict) -> List[Dict]:
     reader = SensorReader(config)
     try:
         return reader.read_all_sensors()
+    finally:
+        reader.cleanup()
+
+
+async def async_read_sensors(config: Dict) -> List[Dict]:
+    """
+    Read all sensors and return data list (async).
+    
+    Args:
+        config: Configuration dictionary
+        
+    Returns:
+        List of sensor data dictionaries
+    """
+    reader = SensorReader(config)
+    try:
+        return await reader.async_read_all_sensors()
     finally:
         reader.cleanup()

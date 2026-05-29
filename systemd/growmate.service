@@ -1,6 +1,6 @@
 [Unit]
 Description=GrowMate Pods - Plant Monitoring System
-Documentation=https://github.com/USER/rpi-growmate-pods
+Documentation=https://github.com/FarelRA/rpi-growmate-pods
 After=network-online.target
 Wants=network-online.target
 
@@ -19,13 +19,6 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=growmate
-
-# Security hardening (optional, adjust as needed)
-# PrivateTmp=yes
-# NoNewPrivileges=true
-# ProtectSystem=strict
-# ProtectHome=yes
-# ReadWritePaths=/etc/growmate
 
 # Environment
 Environment="PYTHONUNBUFFERED=1"

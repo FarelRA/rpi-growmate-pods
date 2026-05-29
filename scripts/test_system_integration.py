@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-End-to-End Test Suite for GrowMate Raspberry Pi Port
+System Integration Test Suite (End-to-End Testing)
 
-This test suite validates the complete system integration, ensuring all components
-work together correctly and match ESP32 behavior.
+Validates complete system integration with all components working together:
+- Configuration management (loading, validation, default values)
+- Sensor reading and calibration (ADC, DHT22)
+- Camera capture and image processing
+- API client communication (sensor upload, camera upload, commands)
+- Actuator control (pump, light relays)
+- Network management (WiFi, AP mode)
+- Onboarding portal (Flask routes, configuration)
 
 Tests are designed to run without actual hardware using mocking where necessary.
 For hardware validation, use test_hardware.py on actual Raspberry Pi.
 
 Usage:
-    python3 scripts/test_e2e.py
+    python3 scripts/test_system_integration.py
 """
 
 import sys
@@ -71,9 +77,9 @@ class TestConfigurationManagement(unittest.TestCase):
         invalid_config = {'device': {}}
         self.assertFalse(config_manager.validate_config(invalid_config))
     
-    def test_config_intervals_match_esp32(self):
-        """Test that default intervals match ESP32"""
-        # ESP32 defaults: SENSOR=15s, CAMERA=900s
+    def test_config_intervals_correct(self):
+        """Test that default intervals have correct values"""
+        # Default values: SENSOR=15s, CAMERA=900s
         self.assertEqual(self.test_config['intervals']['sensor_reading'], 15)
         self.assertEqual(self.test_config['intervals']['camera_capture'], 900)
 
@@ -121,11 +127,11 @@ class TestSensorReading(unittest.TestCase):
         self.assertGreater(temp, 0)
         self.assertGreater(humidity, 0)
     
-    def test_calibration_algorithm_matches_esp32(self):
-        """Test that calibration algorithm matches ESP32 (integer division)"""
+    def test_calibration_algorithm_correct(self):
+        """Test that calibration algorithm is correct (integer division)"""
         import sensors
         
-        # ESP32 uses integer division: (raw - min) * 100 / (max - min)
+        # Uses integer division: (raw - min) * 100 / (max - min)
         calibration = {'min': 0, 'max': 65535}
         
         # Test boundary values
@@ -168,8 +174,8 @@ class TestCameraCapture(unittest.TestCase):
             mock_camera.capture_file.assert_called_once()
     
     def test_camera_lifecycle_is_ephemeral(self):
-        """Test that camera lifecycle is ephemeral (matches ESP32)"""
-        # ESP32: camera_service_init() → capture → camera_service_deinit()
+        """Test that camera lifecycle is ephemeral ()"""
+        # camera_service_init() → capture → camera_service_deinit()
         # Raspberry Pi: context manager ensures init/cleanup per cycle
         import camera_service
         
@@ -183,7 +189,7 @@ class TestAPIClient(unittest.TestCase):
     
     @patch('requests.post')
     def test_sensor_data_upload(self, mock_post):
-        """Test sensor data upload format matches ESP32"""
+        """Test sensor data upload format """
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {'commands': []}
@@ -191,7 +197,7 @@ class TestAPIClient(unittest.TestCase):
         
         import api_client
         
-        # ESP32 sensor data format
+        # Expected sensor data format
         sensor_data = {
             'deviceId': 'test-device-001',
             'firmwareVersion': '1.0.0',
@@ -223,7 +229,7 @@ class TestAPIClient(unittest.TestCase):
     
     @patch('requests.post')
     def test_camera_upload(self, mock_post):
-        """Test camera image upload format matches ESP32"""
+        """Test camera image upload format """
         mock_response = Mock()
         mock_response.status_code = 200
         mock_post.return_value = mock_response
@@ -299,9 +305,9 @@ class TestActuatorControl(unittest.TestCase):
         # Light should be turned on
         mock_light.on.assert_called()
     
-    def test_command_parsing_matches_esp32(self):
-        """Test that command parsing matches ESP32 format"""
-        # ESP32 command format:
+    def test_command_parsing_correct(self):
+        """Test that command parsing has correct format"""
+        # Expected command format:
         # {"kind": "pump", "durationMs": 5000}
         # {"kind": "light", "enabled": true}
         
@@ -332,8 +338,8 @@ class TestOnboardingFlow(unittest.TestCase):
         self.assertIsNotNone(app)
     
     def test_ap_mode_ssid_format(self):
-        """Test AP mode SSID format matches ESP32"""
-        # ESP32: GrowMate-{last 6 chars of MAC}
+        """Test AP mode SSID format """
+        # GrowMate-{last 6 chars of MAC}
         # Example: GrowMate-A1B2C3
         
         device_id = 'growmate-aabbcc112233'
@@ -343,8 +349,8 @@ class TestOnboardingFlow(unittest.TestCase):
         self.assertEqual(len(ssid), 15)  # GrowMate- (9) + 6 chars
     
     def test_ap_mode_password(self):
-        """Test AP mode password matches ESP32"""
-        # ESP32: "growmate" (8 chars, WPA2-PSK minimum)
+        """Test AP mode password """
+        # "growmate" (8 chars, WPA2-PSK minimum)
         password = "growmate"
         
         self.assertEqual(password, "growmate")
@@ -355,8 +361,8 @@ class TestFailureRecovery(unittest.TestCase):
     """Test failure recovery mechanisms"""
     
     def test_consecutive_failure_threshold(self):
-        """Test consecutive failure threshold matches ESP32"""
-        # ESP32: APP_ONBOARDING_FAILURE_THRESHOLD = 5
+        """Test consecutive failure threshold """
+        # APP_ONBOARDING_FAILURE_THRESHOLD = 5
         FAILURE_THRESHOLD = 5
         
         consecutive_failures = 0
@@ -405,8 +411,8 @@ class TestMainApplicationLoop(unittest.TestCase):
     """Test main application loop integration"""
     
     def test_loop_counter_timing(self):
-        """Test loop counter timing matches ESP32"""
-        # ESP32: loops_since_camera counter, not time-based
+        """Test loop counter timing """
+        # loops_since_camera counter, not time-based
         # Camera period: CAMERA_INTERVAL_SECONDS // SENSOR_INTERVAL_SECONDS
         
         SENSOR_INTERVAL = 15  # seconds
@@ -417,7 +423,7 @@ class TestMainApplicationLoop(unittest.TestCase):
         self.assertEqual(camera_period, 60)  # 900 / 15 = 60 loops
     
     def test_camera_due_calculation(self):
-        """Test camera due calculation matches ESP32"""
+        """Test camera due calculation """
         loops_since_camera = 0
         camera_period = 60
         
@@ -457,7 +463,7 @@ def run_tests():
     print("GrowMate Raspberry Pi Port - End-to-End Test Suite")
     print("=" * 70)
     print()
-    print("Testing system integration and ESP32 compatibility...")
+    print("Testing system integration and device compatibility...")
     print()
     
     # Create test suite

@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-Phase 4 verification script.
+Network and Onboarding System Test Suite
 
-Tests network and onboarding components without requiring hardware or root access.
+Tests WiFi management and web-based onboarding portal components:
+- NetworkManager (AP mode, WiFi connection, network scanning)
+- Onboarding portal (Flask routes, API endpoints, HTML templates)
+- Configuration templates (hostapd, dnsmasq)
+- Device compatibility (SSID format, device ID generation)
+
+Tests run without requiring hardware or root access.
 For full testing, manual verification on actual Raspberry Pi hardware is required.
 """
 
@@ -35,7 +41,7 @@ def test_result(name: str, passed: bool, details: str = ""):
 
 
 def test_imports():
-    """Test that Phase 4 modules can be imported."""
+    """Test that network and onboarding modules can be imported."""
     print("\n" + "=" * 60)
     print("TEST: Module Imports")
     print("=" * 60)
@@ -91,9 +97,9 @@ def test_configuration_templates():
 
 
 def test_html_template():
-    """Test that HTML template matches ESP32 format."""
+    """Test that HTML template has correct format."""
     print("\n" + "=" * 60)
-    print("TEST: HTML Template (ESP32 Compatibility)")
+    print("TEST: HTML Template (Device Compatibility)")
     print("=" * 60)
     
     base_dir = Path(__file__).parent.parent
@@ -102,7 +108,7 @@ def test_html_template():
     if index_html.exists():
         content = index_html.read_text()
         
-        # Check for ESP32-specific elements
+        # Check for required elements
         checks = {
             "Inline CSS": "<style>" in content and "body{font-family:system-ui" in content,
             "GrowMate onboarding title": "GrowMate onboarding" in content,
@@ -202,9 +208,9 @@ def test_onboarding_portal_routes():
 
 
 def test_api_response_formats():
-    """Test API response formats match ESP32."""
+    """Test API response formats are correct."""
     print("\n" + "=" * 60)
-    print("TEST: API Response Formats (ESP32 Compatibility)")
+    print("TEST: API Response Formats (Device Compatibility)")
     print("=" * 60)
     
     try:
@@ -245,10 +251,10 @@ def test_api_response_formats():
         test_result("API response formats", False, str(e))
 
 
-def test_esp32_compatibility():
-    """Test ESP32 compatibility features."""
+def test_device_compatibility():
+    """Test device compatibility features."""
     print("\n" + "=" * 60)
-    print("TEST: ESP32 Compatibility Features")
+    print("TEST: Device Compatibility Features")
     print("=" * 60)
     
     try:
@@ -273,13 +279,13 @@ def test_esp32_compatibility():
         )
         
     except Exception as e:
-        test_result("ESP32 compatibility", False, str(e))
+        test_result("Device compatibility", False, str(e))
 
 
 def main():
-    """Run all Phase 4 tests."""
+    """Run all network and onboarding tests."""
     print("\n" + "=" * 60)
-    print("PHASE 4: Network & Onboarding System - Verification Tests")
+    print("Network & Onboarding System - Verification Tests")
     print("=" * 60)
     print("\nTesting software components (hardware tests require Raspberry Pi)...")
     
@@ -290,7 +296,7 @@ def main():
     test_network_manager_structure()
     test_onboarding_portal_routes()
     test_api_response_formats()
-    test_esp32_compatibility()
+    test_device_compatibility()
     
     # Print summary
     print("\n" + "=" * 60)
@@ -301,7 +307,7 @@ def main():
     print(f"Total:  {tests_passed + tests_failed}")
     
     if tests_failed == 0:
-        print("\n✓ ALL TESTS PASSED - Phase 4 Software Components Ready")
+        print("\n✓ ALL TESTS PASSED - Network & Onboarding Components Ready")
         print("\nNext Steps:")
         print("1. Deploy to Raspberry Pi hardware")
         print("2. Test AP mode creation (requires root)")

@@ -13,8 +13,8 @@ Metrics monitored:
 - Process-specific metrics (if GrowMate service is running)
 - Uptime
 
-This is a bonus feature not present in ESP32, but valuable for production
-monitoring on Linux systems.
+This is an additional monitoring feature valuable for production
+deployment on Linux systems.
 
 Usage:
     # Monitor for 60 seconds with 5-second intervals
