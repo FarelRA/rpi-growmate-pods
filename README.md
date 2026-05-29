@@ -304,30 +304,80 @@ sudo rm /etc/growmate/config.yaml
 sudo systemctl restart growmate
 ```
 
+### Failure Handling and Recovery
+
+The system implements automatic failure recovery matching ESP32 behavior:
+
+**Consecutive Failure Threshold:**
+- System tracks consecutive failures (sensor read, WiFi connect, or upload failures)
+- After **5 consecutive failures**, device automatically re-enters AP mode
+- Allows reconfiguration without physical access
+- Failure counter resets to 0 on any successful operation
+
+**Retry Mechanisms:**
+- **Upload retry:** 2 attempts per operation
+- **WiFi retry:** 4 connection attempts
+- **DHT22 retry:** 2 read attempts with increasing delays
+
+**Graceful Degradation:**
+- If some sensors fail, continues with available sensors
+- If camera fails, logs error and continues sensor readings
+- System never crashes due to hardware failures
+
+**Example Failure Scenario:**
+```
+Cycle 1: Upload failed (consecutive_failures = 1)
+Cycle 2: Upload failed (consecutive_failures = 2)
+Cycle 3: Upload failed (consecutive_failures = 3)
+Cycle 4: Upload success (consecutive_failures = 0) ← Reset
+Cycle 5: Upload failed (consecutive_failures = 1)
+...
+Cycle N: 5 consecutive failures → Re-enter AP mode
+```
+
+**Monitoring Failures:**
+```bash
+# Watch for failure messages in logs
+sudo journalctl -u growmate -f | grep -i "fail\|error"
+
+# Check if device re-entered AP mode
+nmcli device wifi list | grep GrowMate
+```
+
 ## API Integration
 
 ### Sensor Data Upload
 
-**Endpoint:** `POST /api/sensors`
+**Endpoint:** Configured in `config.yaml` as `api.sensor_url`
 
-**Request:**
+**Method:** `POST`
+
+**Content-Type:** `application/json`
+
+**Request Body:**
 ```json
 {
   "deviceId": "growmate-b827eb123456",
   "firmwareVersion": "2.0.0-rpi",
   "sensors": [
-    {"kind": "soil", "value": 45, "unit": "%", "raw": 1843},
-    {"kind": "light", "value": 78, "unit": "%", "raw": 3195},
-    {"kind": "water", "value": 92, "unit": "%", "raw": 3767},
-    {"kind": "temperature", "value": 24, "unit": "C", "raw": -1},
-    {"kind": "air", "value": 65, "unit": "%", "raw": -1}
+    {"kind": "soil_moisture", "value": 45, "raw": 29491},
+    {"kind": "light", "value": 78, "raw": 51118},
+    {"kind": "water_level", "value": 92, "raw": 60292},
+    {"kind": "temperature", "value": 25},
+    {"kind": "humidity", "value": 60}
   ],
   "currentState": {
-    "pumpEnabled": false,
-    "lightEnabled": true
+    "pumpRunning": false,
+    "lightOn": false
   }
 }
 ```
+
+**Important Notes:**
+- **ADC sensors** (soil_moisture, light, water_level) include `raw` field with 16-bit ADC value
+- **DHT22 sensors** (temperature, humidity) do NOT include `raw` field
+- Field names match ESP32 exactly for API compatibility
+- `currentState` uses `pumpRunning` and `lightOn` (not `pumpEnabled`/`lightEnabled`)
 
 **Response:**
 ```json
@@ -339,85 +389,71 @@ sudo systemctl restart growmate
 }
 ```
 
+**Command Types:**
+- `pump`: Run water pump for specified duration (milliseconds)
+- `light`: Turn grow light on/off
+
 ### Camera Image Upload
 
-**Endpoint:** `POST /api/camera`
+**Endpoint:** Configured in `config.yaml` as `api.camera_url`
+
+**Method:** `POST`
+
+**Content-Type:** `multipart/form-data`
 
 **Headers:**
-- `Content-Type: image/jpeg`
 - `X-Device-Id: growmate-b827eb123456`
 
-**Body:** Raw JPEG bytes
+**Form Data:**
+- Field name: `image`
+- Content: JPEG image file
+
+**Example using curl:**
+```bash
+curl -X POST https://api.example.com/camera \
+  -H "X-Device-Id: growmate-b827eb123456" \
+  -F "image=@/tmp/capture.jpg"
+```
 
 ## Troubleshooting
 
-### Service won't start
+For comprehensive troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
+### Quick Diagnostics
+
+**Service won't start:**
 ```bash
-# Check service status
 sudo systemctl status growmate
-
-# Check logs
 sudo journalctl -u growmate -n 50
-
-# Common issues:
-# - I2C not enabled: sudo raspi-config
-# - Camera not enabled: sudo raspi-config
-# - Missing dependencies: pip3 install -r requirements.txt
 ```
 
-### Sensors not reading
-
+**Sensors not reading:**
 ```bash
-# Test I2C bus
-sudo i2cdetect -y 1
-
-# Should show device at 0x48 (ADS1115)
-# If not, check wiring
-
-# Test hardware
+sudo i2cdetect -y 1  # Should show 0x48 (ADS1115)
 sudo python3 /opt/growmate/scripts/test_hardware.py
 ```
 
-### Camera not working
-
+**Camera not working:**
 ```bash
-# Test camera
-libcamera-hello
-
-# Check camera is enabled
-sudo raspi-config
-# Interface Options -> Camera -> Enable
-
-# Check cable connection
+libcamera-hello  # Test camera
+sudo raspi-config  # Enable camera interface
 ```
 
-### WiFi connection issues
-
+**WiFi connection issues:**
 ```bash
-# Check WiFi status
 nmcli device status
-
-# Check logs
 sudo journalctl -u growmate | grep -i wifi
+```
 
-# Re-enter onboarding mode
+**Re-enter onboarding mode:**
+```bash
 sudo rm /etc/growmate/config.yaml
 sudo systemctl restart growmate
 ```
 
-### AP mode not working
-
+**Check for consecutive failures:**
 ```bash
-# Check hostapd status
-sudo systemctl status hostapd
-
-# Check dnsmasq status
-sudo systemctl status dnsmasq
-
-# Check configuration
-sudo cat /etc/hostapd/hostapd.conf
-sudo cat /etc/dnsmasq.conf
+sudo journalctl -u growmate | grep -i "consecutive\|failure"
 ```
 
 ## Development
@@ -460,12 +496,52 @@ python3 src/main.py
 
 ### Testing
 
+**End-to-End Tests:**
 ```bash
-# Test individual modules
-python3 -c "from src.config_manager import ConfigManager; print('OK')"
+# Run comprehensive integration tests
+python3 scripts/test_e2e.py
 
-# Test hardware (requires Pi with hardware)
+# Tests configuration, sensors, camera, API, actuators, onboarding, failure recovery
+# Uses mocking - no hardware required
+```
+
+**Failure Scenario Tests:**
+```bash
+# Run failure handling tests
+python3 scripts/test_failures.py
+
+# Tests network failures, API failures, sensor failures, camera failures,
+# consecutive failure threshold, power cycle recovery
+```
+
+**Hardware Tests:**
+```bash
+# Test actual hardware components (requires Pi with hardware)
 sudo python3 scripts/test_hardware.py
+
+# Tests I2C, ADC, sensors, camera, GPIO relays
+```
+
+**Performance Monitoring:**
+```bash
+# Monitor system performance in real-time
+sudo python3 scripts/monitor_performance.py --continuous
+
+# Monitor for specific duration
+sudo python3 scripts/monitor_performance.py --duration 60 --interval 5
+
+# Log metrics to file
+sudo python3 scripts/monitor_performance.py --output /var/log/growmate-perf.log
+```
+
+**Phase Validation Tests:**
+```bash
+# Run phase-specific validation tests
+python3 scripts/test_modules.py    # Phase 3: Core modules
+python3 scripts/test_phase4.py     # Phase 4: Network & onboarding
+python3 scripts/test_phase5.py     # Phase 5: Main application
+python3 scripts/test_phase6.py     # Phase 6: Service deployment
+python3 scripts/test_phase7.py     # Phase 7: Testing & documentation
 ```
 
 ## Comparison with ESP32 Version
@@ -503,9 +579,12 @@ For issues and questions:
 
 ## Roadmap
 
-- [ ] Add unit tests
+- [x] Add unit tests (Phase 7: test_e2e.py, test_failures.py)
+- [x] Add performance monitoring (Phase 7: monitor_performance.py)
 - [ ] Add mock hardware for development
 - [ ] Add OTA updates
 - [ ] Add web dashboard
 - [ ] Add MQTT support
 - [ ] Add multiple device support
+- [ ] Add data queuing for offline operation
+- [ ] Add local web interface for monitoring
