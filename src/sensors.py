@@ -110,6 +110,8 @@ class SensorReader:
         """
         Apply calibration to convert raw ADC value to percentage.
         
+        Uses integer division to match ESP32 behavior exactly.
+        
         Args:
             raw_value: Raw ADC value (0-65535)
             sensor_type: Sensor type key in calibration config
@@ -121,10 +123,20 @@ class SensorReader:
         min_val = cal.get('min', 0)
         max_val = cal.get('max', ADC_MAX_VALUE)
         
-        # Map raw value to 0-100% using calibration
-        percent = map_range(raw_value, min_val, max_val, 0, 100)
+        # Handle invalid calibration
+        if raw_value < 0 or min_val == max_val:
+            return -1
         
-        return int(round(percent))
+        # Apply calibration using integer division (matches ESP32 raw_to_percent)
+        if min_val < max_val:
+            # Normal range: higher raw = higher percentage
+            pct = (raw_value - min_val) * 100 // (max_val - min_val)
+        else:
+            # Inverted range: higher raw = lower percentage
+            pct = (min_val - raw_value) * 100 // (min_val - max_val)
+        
+        # Clamp to 0-100 range
+        return max(0, min(100, pct))
     
     def read_soil_moisture(self) -> Optional[Dict]:
         """
