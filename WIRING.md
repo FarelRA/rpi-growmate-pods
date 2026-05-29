@@ -1,0 +1,721 @@
+# GrowMate Pods - Hardware Wiring Guide
+
+Complete hardware integration guide for Raspberry Pi Zero W GrowMate Pods.
+
+---
+
+## Table of Contents
+
+1. [Component List](#component-list)
+2. [Pin Assignment Summary](#pin-assignment-summary)
+3. [Wiring Diagrams](#wiring-diagrams)
+4. [Step-by-Step Assembly](#step-by-step-assembly)
+5. [Power Requirements](#power-requirements)
+6. [Testing Procedures](#testing-procedures)
+7. [Troubleshooting](#troubleshooting)
+8. [Safety Notes](#safety-notes)
+
+---
+
+## Component List
+
+| Component | Specification | Quantity | Notes |
+|-----------|--------------|----------|-------|
+| Raspberry Pi Zero W | BCM2835, 512MB RAM, WiFi | 1 | Main controller |
+| Pi Camera Module v1 | 5MP, CSI interface | 1 | Image capture |
+| ADS1115 ADC Module | 16-bit, 4-channel, I2C | 1 | **Required** - Pi has no ADC |
+| DHT22 Sensor | Digital temp/humidity | 1 | With 10kΩ pull-up resistor |
+| Soil Moisture Sensor | Analog capacitive | 1 | Connects to ADS1115 A0 |
+| Light Sensor | Photoresistor module | 1 | Connects to ADS1115 A1 |
+| Water Level Sensor | Analog resistive | 1 | Connects to ADS1115 A2 |
+| 2-Channel Relay Module | 5V, optocoupler isolated | 1 | Pump + light control |
+| MicroSD Card | 16GB+ Class 10 | 1 | OS and storage |
+| Power Supply | 5V 2.5A micro USB | 1 | Adequate current for all components |
+| Jumper Wires | Male-to-female | ~20 | For connections |
+| Breadboard (optional) | Half-size | 1 | For prototyping |
+
+**Total Cost:** ~$69 USD
+
+---
+
+## Pin Assignment Summary
+
+### Raspberry Pi Zero W GPIO Pinout
+
+```
+                    Raspberry Pi Zero W
+                    
+     3.3V  (1) (2)  5V
+    GPIO2  (3) (4)  5V
+    GPIO3  (5) (6)  GND
+    GPIO4  (7) (8)  GPIO14
+      GND  (9) (10) GPIO15
+   GPIO17 (11) (12) GPIO18
+   GPIO27 (13) (14) GND
+   GPIO22 (15) (16) GPIO23
+     3.3V (17) (18) GPIO24
+   GPIO10 (19) (20) GND
+    GPIO9 (21) (22) GPIO25
+   GPIO11 (23) (24) GPIO8
+      GND (25) (26) GPIO7
+    GPIO0 (27) (28) GPIO1
+    GPIO5 (29) (30) GND
+    GPIO6 (31) (32) GPIO12
+   GPIO13 (33) (34) GND
+   GPIO19 (35) (36) GPIO16
+   GPIO26 (37) (38) GPIO20
+      GND (39) (40) GPIO21
+```
+
+### Pin Assignments
+
+| Function | GPIO/Pin | Component | Notes |
+|----------|----------|-----------|-------|
+| I2C SDA | GPIO 2 (Pin 3) | ADS1115 SDA | I2C data line |
+| I2C SCL | GPIO 3 (Pin 5) | ADS1115 SCL | I2C clock line |
+| DHT22 Data | GPIO 4 (Pin 7) | DHT22 Data | Requires 10kΩ pull-up to 3.3V |
+| Pump Relay | GPIO 17 (Pin 11) | Relay CH1 IN | Water pump control |
+| Light Relay | GPIO 27 (Pin 13) | Relay CH2 IN | Grow light control |
+| Camera | CSI Port | Pi Camera | Ribbon cable connection |
+| Power (5V) | Pin 2 or 4 | Relay VCC | 5V power for relay module |
+| Power (3.3V) | Pin 1 or 17 | ADS1115 VDD, DHT22 VCC | 3.3V power |
+| Ground | Pin 6, 9, 14, 20, 25, 30, 34, 39 | All GND | Common ground |
+
+---
+
+## Wiring Diagrams
+
+### 1. ADS1115 ADC Module
+
+The ADS1115 provides 4 analog input channels (A0-A3). We use 3 channels for analog sensors.
+
+```
+ADS1115 Module          Raspberry Pi Zero W
+┌─────────────┐         ┌──────────────────┐
+│             │         │                  │
+│  VDD  ──────┼─────────┤ Pin 1 (3.3V)     │
+│  GND  ──────┼─────────┤ Pin 6 (GND)      │
+│  SCL  ──────┼─────────┤ Pin 5 (GPIO3)    │
+│  SDA  ──────┼─────────┤ Pin 3 (GPIO2)    │
+│             │         │                  │
+│  A0   ──────┼─────────┤ Soil Sensor OUT  │
+│  A1   ──────┼─────────┤ Light Sensor OUT │
+│  A2   ──────┼─────────┤ Water Sensor OUT │
+│  A3   (NC)  │         │                  │
+│             │         │                  │
+│  ADDR ──────┼─────────┤ GND (0x48)       │
+└─────────────┘         └──────────────────┘
+```
+
+**I2C Address:** 0x48 (ADDR pin connected to GND)
+
+**Notes:**
+- ADS1115 operates at 3.3V logic level (compatible with Pi)
+- Pull-up resistors for I2C are built into the Pi
+- A3 channel is unused (available for future expansion)
+
+### 2. Analog Sensors (Soil, Light, Water)
+
+All analog sensors connect to the ADS1115 ADC module.
+
+```
+Soil Moisture Sensor
+┌──────────────┐
+│   VCC  ──────┼───── 3.3V (Pin 1)
+│   GND  ──────┼───── GND (Pin 6)
+│   AOUT ──────┼───── ADS1115 A0
+└──────────────┘
+
+Light Sensor Module
+┌──────────────┐
+│   VCC  ──────┼───── 3.3V (Pin 1)
+│   GND  ──────┼───── GND (Pin 6)
+│   OUT  ──────┼───── ADS1115 A1
+└──────────────┘
+
+Water Level Sensor
+┌──────────────┐
+│   VCC  ──────┼───── 3.3V (Pin 1)
+│   GND  ──────┼───── GND (Pin 6)
+│   AOUT ──────┼───── ADS1115 A2
+└──────────────┘
+```
+
+**Important:** Use capacitive soil moisture sensors (not resistive) to prevent corrosion.
+
+### 3. DHT22 Temperature/Humidity Sensor
+
+```
+DHT22 Sensor            Raspberry Pi Zero W
+┌──────────────┐        ┌──────────────────┐
+│              │        │                  │
+│  VCC  ───────┼────────┤ Pin 1 (3.3V)     │
+│              │        │                  │
+│  DATA ───────┼────────┤ Pin 7 (GPIO4)    │
+│       │      │        │                  │
+│       └──────┼────┐   │                  │
+│              │    │   │                  │
+│  NC   (not   │   [R]  │ 10kΩ pull-up     │
+│       used)  │    │   │ resistor         │
+│              │    └───┤ Pin 1 (3.3V)     │
+│  GND  ───────┼────────┤ Pin 6 (GND)      │
+│              │        │                  │
+└──────────────┘        └──────────────────┘
+```
+
+**Critical:** DHT22 requires a 10kΩ pull-up resistor between DATA and VCC (3.3V).
+
+**Pin Order (left to right, facing sensor):**
+1. VCC (3.3V)
+2. DATA (GPIO4)
+3. NC (not connected)
+4. GND
+
+### 4. Pi Camera Module v1
+
+```
+Pi Camera Module        Raspberry Pi Zero W
+┌──────────────┐        ┌──────────────────┐
+│              │        │                  │
+│   [Lens]     │        │                  │
+│              │        │    ┌──────┐      │
+│   Ribbon ────┼────────┼────┤ CSI  │      │
+│   Cable      │        │    └──────┘      │
+│              │        │                  │
+└──────────────┘        └──────────────────┘
+```
+
+**Connection:**
+1. Lift the black plastic clip on the CSI port (between HDMI and USB ports)
+2. Insert ribbon cable with blue side facing USB port
+3. Push clip down to secure
+
+**Notes:**
+- Handle ribbon cable carefully (fragile)
+- Ensure cable is fully inserted and straight
+- Camera must be enabled in `raspi-config`
+
+### 5. 2-Channel Relay Module
+
+```
+Relay Module            Raspberry Pi Zero W
+┌──────────────┐        ┌──────────────────┐
+│              │        │                  │
+│  VCC  ───────┼────────┤ Pin 2 (5V)       │
+│  GND  ───────┼────────┤ Pin 9 (GND)      │
+│  IN1  ───────┼────────┤ Pin 11 (GPIO17)  │ Pump
+│  IN2  ───────┼────────┤ Pin 13 (GPIO27)  │ Light
+│              │        │                  │
+│  Relay 1 ────┼────────┤ Water Pump       │
+│   COM  ──────┼────────┤ Power +          │
+│   NO   ──────┼────────┤ Pump +           │
+│   NC   (NC)  │        │                  │
+│              │        │                  │
+│  Relay 2 ────┼────────┤ Grow Light       │
+│   COM  ──────┼────────┤ Power +          │
+│   NO   ──────┼────────┤ Light +          │
+│   NC   (NC)  │        │                  │
+└──────────────┘        └──────────────────┘
+```
+
+**Relay Connections:**
+- **COM (Common):** Connect to power supply positive (+)
+- **NO (Normally Open):** Connect to device positive (+)
+- **NC (Normally Closed):** Not used
+- Device negative (-) connects directly to power supply negative (-)
+
+**Logic:**
+- GPIO HIGH (3.3V) = Relay ON = Device powered
+- GPIO LOW (0V) = Relay OFF = Device unpowered
+
+**Important:** Relay module should have optocoupler isolation for safety.
+
+---
+
+## Step-by-Step Assembly
+
+### Phase 1: Preparation
+
+1. **Gather all components** and verify against component list
+2. **Prepare workspace** with good lighting and anti-static mat
+3. **Install Raspberry Pi OS** on microSD card (see README.md)
+4. **Enable I2C and Camera** via `raspi-config` (or use install.sh)
+
+### Phase 2: I2C Components (ADS1115 + Sensors)
+
+**Step 1: Connect ADS1115 to Raspberry Pi**
+
+1. Power off Raspberry Pi
+2. Connect ADS1115 VDD to Pi Pin 1 (3.3V)
+3. Connect ADS1115 GND to Pi Pin 6 (GND)
+4. Connect ADS1115 SCL to Pi Pin 5 (GPIO3)
+5. Connect ADS1115 SDA to Pi Pin 3 (GPIO2)
+6. Connect ADS1115 ADDR to GND (sets I2C address to 0x48)
+
+**Step 2: Connect Analog Sensors to ADS1115**
+
+1. **Soil Moisture Sensor:**
+   - VCC → 3.3V (Pin 1)
+   - GND → GND (Pin 6)
+   - AOUT → ADS1115 A0
+
+2. **Light Sensor:**
+   - VCC → 3.3V (Pin 1)
+   - GND → GND (Pin 6)
+   - OUT → ADS1115 A1
+
+3. **Water Level Sensor:**
+   - VCC → 3.3V (Pin 1)
+   - GND → GND (Pin 6)
+   - AOUT → ADS1115 A2
+
+**Step 3: Test I2C Connection**
+
+```bash
+# Power on Pi and run:
+sudo i2cdetect -y 1
+
+# Expected output:
+#      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+# 00:          -- -- -- -- -- -- -- -- -- -- -- -- --
+# 10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# 20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# 30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# 40: -- -- -- -- -- -- -- -- 48 -- -- -- -- -- -- --
+# 50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# 60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# 70: -- -- -- -- -- -- -- --
+```
+
+You should see `48` (ADS1115 at address 0x48).
+
+### Phase 3: DHT22 Sensor
+
+**Step 1: Connect DHT22**
+
+1. Identify DHT22 pins (facing sensor, left to right):
+   - Pin 1: VCC
+   - Pin 2: DATA
+   - Pin 3: NC (not connected)
+   - Pin 4: GND
+
+2. Connect DHT22:
+   - Pin 1 (VCC) → Pi Pin 1 (3.3V)
+   - Pin 2 (DATA) → Pi Pin 7 (GPIO4)
+   - Pin 4 (GND) → Pi Pin 6 (GND)
+
+3. **Add 10kΩ pull-up resistor:**
+   - Connect between DHT22 Pin 2 (DATA) and Pin 1 (VCC)
+   - This is **required** for reliable operation
+
+**Step 2: Test DHT22**
+
+```bash
+# Run hardware test script:
+sudo python3 /opt/growmate/scripts/test_hardware.py
+```
+
+Should show temperature and humidity readings.
+
+### Phase 4: Pi Camera Module
+
+**Step 1: Connect Camera**
+
+1. Power off Raspberry Pi
+2. Locate CSI port (between HDMI and USB ports)
+3. Gently lift the black plastic clip (pull up, not out)
+4. Insert ribbon cable:
+   - Blue side facing USB port
+   - Silver contacts facing HDMI port
+   - Push cable in fully until it stops
+5. Push clip down to secure cable
+
+**Step 2: Enable Camera**
+
+```bash
+sudo raspi-config
+# Navigate to: Interface Options → Camera → Enable
+# Reboot
+```
+
+**Step 3: Test Camera**
+
+```bash
+# Test with libcamera:
+libcamera-hello --timeout 5000
+
+# Or run hardware test:
+sudo python3 /opt/growmate/scripts/test_hardware.py
+```
+
+### Phase 5: Relay Module (Actuators)
+
+**Step 1: Connect Relay Module to Pi**
+
+1. Connect relay control pins:
+   - Relay VCC → Pi Pin 2 (5V)
+   - Relay GND → Pi Pin 9 (GND)
+   - Relay IN1 → Pi Pin 11 (GPIO17) - Pump control
+   - Relay IN2 → Pi Pin 13 (GPIO27) - Light control
+
+**Step 2: Connect Devices to Relay**
+
+**Water Pump (Relay 1):**
+```
+Power Supply (+) → Relay 1 COM
+Relay 1 NO → Pump (+)
+Pump (-) → Power Supply (-)
+```
+
+**Grow Light (Relay 2):**
+```
+Power Supply (+) → Relay 2 COM
+Relay 2 NO → Light (+)
+Light (-) → Power Supply (-)
+```
+
+**Step 3: Test Relays**
+
+```bash
+# Run hardware test (will pulse relays for 2 seconds each):
+sudo python3 /opt/growmate/scripts/test_hardware.py
+```
+
+**Safety:** Test with LED or multimeter before connecting high-power devices.
+
+### Phase 6: Final Assembly
+
+1. **Organize wiring** - use cable ties or clips
+2. **Secure components** - mount on board or in enclosure
+3. **Double-check all connections** against wiring diagrams
+4. **Verify polarity** - especially for power connections
+5. **Check for shorts** - ensure no exposed wires touch
+
+---
+
+## Power Requirements
+
+### Component Power Consumption
+
+| Component | Voltage | Current (Typical) | Current (Max) |
+|-----------|---------|-------------------|---------------|
+| Raspberry Pi Zero W | 5V | 150mA | 350mA |
+| Pi Camera Module v1 | 3.3V | 250mA | 250mA |
+| ADS1115 | 3.3V | 0.2mA | 1mA |
+| DHT22 | 3.3V | 1mA | 2.5mA |
+| Soil Sensor | 3.3V | 5mA | 10mA |
+| Light Sensor | 3.3V | 5mA | 10mA |
+| Water Sensor | 3.3V | 5mA | 10mA |
+| Relay Module | 5V | 15mA | 30mA |
+| **Total (sensors only)** | | **~430mA** | **~660mA** |
+
+**Additional loads (through relays):**
+- Water pump: Varies (typically 100-500mA at 5-12V)
+- Grow light: Varies (typically 100mA-2A at 12V)
+
+### Power Supply Recommendations
+
+**Minimum:** 5V 2A (2000mA) power supply
+**Recommended:** 5V 2.5A (2500mA) power supply with quality cable
+
+**Important:**
+- Use official Raspberry Pi power supply or equivalent quality
+- Poor power supply causes random crashes, SD card corruption
+- Voltage drop in cheap cables can cause brownouts
+- Pump and light should have separate power supply if high current
+
+### Power Distribution
+
+```
+Main 5V 2.5A PSU
+    │
+    ├─→ Raspberry Pi Zero W (micro USB)
+    │       │
+    │       ├─→ 3.3V regulator (on-board)
+    │       │       │
+    │       │       ├─→ ADS1115 (3.3V)
+    │       │       ├─→ DHT22 (3.3V)
+    │       │       ├─→ Soil sensor (3.3V)
+    │       │       ├─→ Light sensor (3.3V)
+    │       │       └─→ Water sensor (3.3V)
+    │       │
+    │       └─→ 5V GPIO pins
+    │               └─→ Relay module (5V)
+    │
+    └─→ Separate PSU for pump/light (optional, if high current)
+```
+
+---
+
+## Testing Procedures
+
+### Complete Hardware Test
+
+Run the comprehensive hardware test script:
+
+```bash
+sudo python3 /opt/growmate/scripts/test_hardware.py
+```
+
+**Expected output:**
+```
+============================================================
+GrowMate Pods - Hardware Test
+============================================================
+
+[1/6] Testing I2C bus...
+✓ I2C bus initialized
+✓ Found 1 I2C device(s): ['0x48']
+✓ ADS1115 detected at address 0x48
+
+[2/6] Testing ADS1115 ADC...
+✓ Soil Moisture (A0): 12543 (raw), 1.85V
+✓ Light Level (A1): 8921 (raw), 1.32V
+✓ Water Level (A2): 45678 (raw), 2.14V
+
+[3/6] Testing DHT22 sensor...
+✓ Temperature: 23.5°C
+✓ Humidity: 55.2%
+
+[4/6] Testing Pi Camera Module...
+✓ Camera initialized (1600x1200)
+✓ Test image captured: 245678 bytes
+  Saved to: /tmp/growmate_test.jpg
+
+[5/6] Testing GPIO relays...
+✓ GPIO initialized (Pump: GPIO17, Light: GPIO27)
+  Testing pump relay (2 second pulse)...
+✓ Pump relay test complete
+  Testing light relay (2 second pulse)...
+✓ Light relay test complete
+
+[6/6] Testing network interface...
+✓ wlan0 interface exists
+✓ wlan0 is UP
+
+============================================================
+Hardware test complete!
+============================================================
+```
+
+### Individual Component Tests
+
+**Test I2C bus:**
+```bash
+sudo i2cdetect -y 1
+```
+
+**Test camera:**
+```bash
+libcamera-hello --timeout 5000
+libcamera-jpeg -o test.jpg
+```
+
+**Test GPIO (manual):**
+```bash
+# Install gpiozero
+pip3 install gpiozero
+
+# Python test
+python3 << EOF
+from gpiozero import LED
+from time import sleep
+
+pump = LED(17)
+light = LED(27)
+
+pump.on()
+sleep(2)
+pump.off()
+
+light.on()
+sleep(2)
+light.off()
+EOF
+```
+
+---
+
+## Troubleshooting
+
+### I2C Issues
+
+**Problem:** `i2cdetect` shows no devices
+
+**Solutions:**
+1. Check I2C is enabled: `sudo raspi-config` → Interface Options → I2C
+2. Verify wiring: SDA to Pin 3, SCL to Pin 5
+3. Check power: ADS1115 VDD to 3.3V, GND to GND
+4. Try different I2C bus: `i2cdetect -y 0` (older Pi models)
+5. Check for loose connections
+
+**Problem:** ADS1115 shows wrong address
+
+**Solutions:**
+- ADDR pin to GND = 0x48 (default)
+- ADDR pin to VDD = 0x49
+- ADDR pin to SDA = 0x4A
+- ADDR pin to SCL = 0x4B
+
+### DHT22 Issues
+
+**Problem:** DHT22 read errors or timeouts
+
+**Solutions:**
+1. **Add pull-up resistor** (10kΩ between DATA and VCC) - most common issue
+2. Wait 2 seconds between reads (DHT22 is slow)
+3. Check power: 3.3V to VCC, GND to GND
+4. Verify GPIO pin: should be GPIO4 (Pin 7)
+5. Try different DHT22 sensor (some are defective)
+6. Check wiring: DATA pin is Pin 2 on DHT22 (not Pin 3)
+
+**Problem:** Incorrect readings (e.g., -999 or 0)
+
+**Solutions:**
+- Increase delay between reads
+- Check for electromagnetic interference
+- Verify sensor is genuine DHT22 (not DHT11)
+
+### Camera Issues
+
+**Problem:** Camera not detected
+
+**Solutions:**
+1. Enable camera: `sudo raspi-config` → Interface Options → Camera
+2. Check ribbon cable connection (blue side facing USB port)
+3. Ensure cable is fully inserted and clip is secured
+4. Try different ribbon cable (they can be defective)
+5. Update firmware: `sudo rpi-update`
+6. Reboot after enabling camera
+
+**Problem:** "Camera is not enabled" error
+
+**Solutions:**
+```bash
+# Enable camera manually
+sudo raspi-config nonint do_camera 0
+sudo reboot
+```
+
+**Problem:** Poor image quality
+
+**Solutions:**
+- Remove protective film from camera lens
+- Adjust focus (Pi Camera v1 has adjustable focus ring)
+- Check lighting conditions
+- Verify camera is not obstructed
+
+### Relay Issues
+
+**Problem:** Relay doesn't click/activate
+
+**Solutions:**
+1. Check relay power: VCC to 5V (not 3.3V)
+2. Verify GPIO control: IN1 to GPIO17, IN2 to GPIO27
+3. Check relay logic level:
+   - Some relays are active-low (trigger on LOW)
+   - Some relays are active-high (trigger on HIGH)
+   - Adjust code if needed
+4. Test with multimeter: measure voltage on IN pins
+5. Check relay LED indicators (should light when active)
+
+**Problem:** Relay activates but device doesn't turn on
+
+**Solutions:**
+1. Verify device power supply is connected
+2. Check relay wiring: COM to power (+), NO to device (+)
+3. Test device directly (bypass relay)
+4. Check for blown fuse on relay module
+5. Verify relay contact rating matches device current
+
+### Power Issues
+
+**Problem:** Pi randomly reboots or crashes
+
+**Solutions:**
+1. **Upgrade power supply** to 2.5A or higher
+2. Use shorter, thicker USB cable (reduces voltage drop)
+3. Check for "under-voltage" warning (lightning bolt icon)
+4. Disable power-hungry features temporarily
+5. Add powered USB hub if using USB devices
+
+**Problem:** Sensors give erratic readings
+
+**Solutions:**
+- Check power supply quality (use multimeter)
+- Add decoupling capacitors (100nF) near sensors
+- Separate analog and digital grounds if possible
+- Check for loose connections
+
+---
+
+## Safety Notes
+
+### Electrical Safety
+
+1. **Always power off** before connecting/disconnecting components
+2. **Check polarity** before applying power (VCC/GND, +/-)
+3. **Use proper voltage** - 3.3V for sensors, 5V for relay module
+4. **Avoid shorts** - keep exposed wires separated
+5. **Use fuses** for high-current devices (pump, light)
+6. **Insulate connections** - use heat shrink or electrical tape
+
+### Component Safety
+
+1. **ESD protection** - ground yourself before handling components
+2. **Handle camera carefully** - ribbon cable is fragile
+3. **Don't hot-plug** - power off before connecting I2C devices
+4. **Check current ratings** - relay contacts have maximum current
+5. **Ventilation** - ensure Pi and components have airflow
+
+### Water Safety
+
+1. **Keep electronics dry** - use waterproof enclosure
+2. **Separate water and electronics** - use long wires if needed
+3. **Use waterproof sensors** - especially soil moisture sensor
+4. **Check for leaks** - inspect pump connections regularly
+5. **GFCI protection** - use ground fault circuit interrupter for AC devices
+
+### Operational Safety
+
+1. **Monitor first runs** - watch for overheating, strange behavior
+2. **Test before deployment** - run for 24+ hours in safe environment
+3. **Backup configuration** - save config.yaml regularly
+4. **Update software** - keep OS and packages updated
+5. **Physical security** - secure device to prevent tampering
+
+---
+
+## Validation Checklist
+
+Before proceeding to Phase 3, verify all items:
+
+- [ ] All components physically connected per wiring diagrams
+- [ ] I2C bus shows ADS1115 at address 0x48
+- [ ] All 3 analog sensors return valid readings (not -1 or error)
+- [ ] DHT22 returns temperature and humidity (with 10kΩ pull-up)
+- [ ] Camera captures and saves JPEG image successfully
+- [ ] Both relay channels can be toggled (LED indicators work)
+- [ ] No loose connections or exposed wires
+- [ ] Power supply provides stable 5V (measure with multimeter)
+- [ ] Hardware test script runs without errors
+- [ ] All components secured and organized
+- [ ] Wiring documented (take photos for reference)
+
+**Phase 2 Complete!** Ready to proceed to Phase 3: Core Module Development.
+
+---
+
+## Additional Resources
+
+- [Raspberry Pi GPIO Pinout](https://pinout.xyz/)
+- [ADS1115 Datasheet](https://www.ti.com/lit/ds/symlink/ads1115.pdf)
+- [DHT22 Datasheet](https://www.sparkfun.com/datasheets/Sensors/Temperature/DHT22.pdf)
+- [Pi Camera Documentation](https://www.raspberrypi.com/documentation/accessories/camera.html)
+- [I2C Troubleshooting Guide](https://learn.adafruit.com/scanning-i2c-addresses)
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** Phase 2 Implementation  
+**Compatibility:** Raspberry Pi Zero W, Raspberry Pi OS Lite

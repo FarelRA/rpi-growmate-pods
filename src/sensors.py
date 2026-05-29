@@ -221,18 +221,17 @@ class SensorReader:
                 humidity = self.dht_device.humidity
                 
                 if temperature is not None and humidity is not None:
+                    # DHT22 sensors do NOT include 'raw' field (ESP32 compatibility)
                     temp_data = {
                         'kind': 'temperature',
                         'value': int(round(temperature)),
-                        'unit': 'C',
-                        'raw': -1  # DHT22 has no raw ADC value
+                        'unit': 'C'
                     }
                     
                     humidity_data = {
                         'kind': 'air',
                         'value': int(round(humidity)),
-                        'unit': '%',
-                        'raw': -1  # DHT22 has no raw ADC value
+                        'unit': '%'
                     }
                     
                     return temp_data, humidity_data
