@@ -74,69 +74,123 @@ CSI port   - Pi Camera Module v1
 
 ### Prerequisites
 
-- Raspberry Pi Zero W
-- MicroSD card (16GB+) with Raspberry Pi OS Lite
-- All hardware components wired according to pin assignment
+- Raspberry Pi Zero W with Raspberry Pi OS Lite installed
+- MicroSD card (16GB+ recommended)
+- All hardware components wired according to pin assignment (see WIRING.md)
 - Internet connection for initial setup
+- SSH access to the Raspberry Pi
 
-### Quick Install
+### Automated Installation (Recommended)
+
+The automated installation script handles all dependencies, system configuration, and service setup:
 
 ```bash
 # Clone repository
 git clone https://github.com/USER/rpi-growmate-pods.git
 cd rpi-growmate-pods
 
-# Run installation script
+# Run installation script (requires root)
 sudo bash scripts/install.sh
-
-# Reboot to enable I2C and camera
-sudo reboot
-
-# After reboot, start service
-sudo systemctl start growmate
 ```
 
+The installation script will:
+- Update system packages
+- Install all system dependencies (Python, I2C tools, camera support, hostapd, dnsmasq)
+- Enable I2C and Camera interfaces
+- Install Python dependencies
+- Copy files to `/opt/growmate`
+- Create configuration directory at `/etc/growmate`
+- Install and enable systemd service
+- Start the GrowMate service automatically
+
+**Note:** The script will prompt for a reboot if I2C or Camera interfaces need to be enabled. After reboot, the service will start automatically.
+
+### One-Line Remote Installation
+
+For fresh Raspberry Pi installations, you can install directly from GitHub:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/USER/rpi-growmate-pods/main/scripts/install.sh | sudo bash
+```
+
+**Warning:** Only run installation scripts from trusted sources.
+
 ### Manual Installation
+
+If you prefer to install manually or need to customize the installation:
 
 1. **Update system:**
    ```bash
    sudo apt update && sudo apt upgrade -y
    ```
 
-2. **Install dependencies:**
+2. **Install system dependencies:**
    ```bash
-   sudo apt install -y python3 python3-pip python3-dev i2c-tools \
-       libgpiod2 libcamera-apps hostapd dnsmasq
+   sudo apt install -y python3 python3-pip python3-dev python3-venv \
+       i2c-tools libgpiod2 python3-libgpiod \
+       libcamera-apps python3-libcamera python3-picamera2 \
+       hostapd dnsmasq build-essential git curl
    ```
 
-3. **Enable I2C and Camera:**
+3. **Enable I2C and Camera interfaces:**
    ```bash
-   sudo raspi-config
-   # Interface Options -> I2C -> Enable
-   # Interface Options -> Camera -> Enable
-   sudo reboot
+   sudo raspi-config nonint do_i2c 0
+   sudo raspi-config nonint do_camera 0
+   
+   # Add I2C modules to /etc/modules
+   echo "i2c-dev" | sudo tee -a /etc/modules
+   echo "i2c-bcm2835" | sudo tee -a /etc/modules
+   
+   # Load modules immediately
+   sudo modprobe i2c-dev
+   sudo modprobe i2c-bcm2835
    ```
 
-4. **Install Python packages:**
+4. **Clone repository:**
    ```bash
-   pip3 install -r requirements.txt
+   git clone https://github.com/USER/rpi-growmate-pods.git
+   cd rpi-growmate-pods
    ```
 
-5. **Copy files:**
+5. **Install Python dependencies:**
+   ```bash
+   sudo pip3 install -r requirements.txt
+   ```
+
+6. **Copy files to installation directory:**
    ```bash
    sudo mkdir -p /opt/growmate
-   sudo cp -r src templates static config systemd scripts /opt/growmate/
-   sudo mkdir -p /etc/growmate
-   sudo cp config/config.yaml.example /etc/growmate/config.yaml
+   sudo cp -r src templates static config /opt/growmate/
+   sudo cp requirements.txt /opt/growmate/
    ```
 
-6. **Install systemd service:**
+7. **Create configuration directory:**
+   ```bash
+   sudo mkdir -p /etc/growmate
+   sudo chmod 755 /etc/growmate
+   ```
+
+8. **Configure AP mode services:**
+   ```bash
+   # Stop and disable hostapd/dnsmasq (app will manage them)
+   sudo systemctl stop hostapd dnsmasq
+   sudo systemctl disable hostapd dnsmasq
+   sudo systemctl unmask hostapd
+   ```
+
+9. **Install and start systemd service:**
    ```bash
    sudo cp systemd/growmate.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable growmate
    sudo systemctl start growmate
    ```
+
+10. **Verify installation:**
+    ```bash
+    sudo systemctl status growmate
+    sudo journalctl -u growmate -f
+    ```
 
 ## Configuration
 
