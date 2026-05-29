@@ -199,9 +199,9 @@ intervals:
   sensor_reading: 15      # seconds
   camera_capture: 900     # seconds
 calibration:
-  soil_moisture: {min: 0, max: 65535}
+  soil: {min: 0, max: 65535}
   light: {min: 0, max: 65535}
-  water_level: {min: 0, max: 65535}
+  water: {min: 0, max: 65535}
 sensors:
   enable_dht22: true
 ```

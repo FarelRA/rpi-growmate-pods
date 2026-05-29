@@ -128,17 +128,17 @@ class TestAPIDocumentation(unittest.TestCase):
     
     def test_api_sensor_kinds_match_esp32(self):
         """Test sensor kinds match ESP32 format"""
-        # ESP32 uses: soil_moisture, light, water_level, temperature, humidity
-        self.assertIn('soil_moisture', self.readme_content)
-        self.assertIn('water_level', self.readme_content)
-        self.assertIn('humidity', self.readme_content)
+        # ESP32 uses: soil, light, water, temperature, air
+        self.assertIn('"kind": "soil"', self.readme_content)
+        self.assertIn('"kind": "water"', self.readme_content)
+        self.assertIn('"kind": "air"', self.readme_content)
     
     def test_api_dht22_no_raw_field(self):
         """Test DHT22 sensors documented without raw field"""
-        # README should show temperature and humidity without raw field
+        # README should show temperature and air without raw field
         # This is validated by checking the example JSON
         self.assertIn('"kind": "temperature"', self.readme_content)
-        self.assertIn('"kind": "humidity"', self.readme_content)
+        self.assertIn('"kind": "air"', self.readme_content)
     
     def test_api_camera_upload_format(self):
         """Test camera upload format is documented"""

@@ -196,5 +196,5 @@ API_CAMERA_ENDPOINT = "https://avid-mammoth-766.convex.site/api/camera"
 API_TIMEOUT_SENSOR = 12.0  # seconds
 API_TIMEOUT_CAMERA = 45.0  # seconds
 
-# Firmware version
-FIRMWARE_VERSION = "2.0.0-rpi"
+# Firmware version (matches ESP32 exactly)
+FIRMWARE_VERSION = "2.0.0"

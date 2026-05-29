@@ -15,9 +15,11 @@ from picamera2.outputs import FileOutput
 logger = logging.getLogger("growmate.camera")
 
 
-# Camera configuration (based on ESP32: UXGA resolution, JPEG quality 12)
-CAMERA_WIDTH = 1600
-CAMERA_HEIGHT = 1200
+# Camera configuration (matches ESP32 exactly: SVGA resolution, JPEG quality 12)
+# ESP32 uses FRAMESIZE_SVGA (800x600) with JPEG quality 12 (ESP32 scale: 0=best, 63=worst)
+# Standard JPEG quality ~80-85 approximates ESP32 quality 12
+CAMERA_WIDTH = 800
+CAMERA_HEIGHT = 600
 JPEG_QUALITY = 85  # 0-100 scale (higher = better quality)
 
 

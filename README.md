@@ -231,9 +231,9 @@ intervals:
   camera_capture: 900     # seconds (15 minutes)
 
 calibration:
-  soil_moisture: {min: 0, max: 65535}
+  soil: {min: 0, max: 65535}
   light: {min: 0, max: 65535}
-  water_level: {min: 0, max: 65535}
+  water: {min: 0, max: 65535}
 
 sensors:
   enable_dht22: true
@@ -358,26 +358,27 @@ nmcli device wifi list | grep GrowMate
 ```json
 {
   "deviceId": "growmate-b827eb123456",
-  "firmwareVersion": "2.0.0-rpi",
+  "firmwareVersion": "2.0.0",
   "sensors": [
-    {"kind": "soil_moisture", "value": 45, "raw": 29491},
-    {"kind": "light", "value": 78, "raw": 51118},
-    {"kind": "water_level", "value": 92, "raw": 60292},
-    {"kind": "temperature", "value": 25},
-    {"kind": "humidity", "value": 60}
+    {"kind": "soil", "value": 45, "unit": "%", "raw": 29491},
+    {"kind": "light", "value": 78, "unit": "%", "raw": 51118},
+    {"kind": "water", "value": 92, "unit": "%", "raw": 60292},
+    {"kind": "temperature", "value": 25, "unit": "C"},
+    {"kind": "air", "value": 60, "unit": "%"}
   ],
   "currentState": {
-    "pumpRunning": false,
-    "lightOn": false
+    "pumpEnabled": false,
+    "lightEnabled": false
   }
 }
 ```
 
 **Important Notes:**
-- **ADC sensors** (soil_moisture, light, water_level) include `raw` field with 16-bit ADC value
-- **DHT22 sensors** (temperature, humidity) do NOT include `raw` field
+- **ADC sensors** (soil, light, water) include `raw` field with 16-bit ADC value
+- **DHT22 sensors** (temperature, air) do NOT include `raw` field
+- All sensors include `unit` field (%, C)
 - Field names match ESP32 exactly for API compatibility
-- `currentState` uses `pumpRunning` and `lightOn` (not `pumpEnabled`/`lightEnabled`)
+- `currentState` uses `pumpEnabled` and `lightEnabled`
 
 **Response:**
 ```json
