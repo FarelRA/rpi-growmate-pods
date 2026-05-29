@@ -6,6 +6,7 @@ Provides web interface for WiFi setup and device configuration.
 """
 
 import logging
+import threading
 from flask import Flask, request, jsonify, render_template
 from typing import Dict, Any
 from config_manager import ConfigManager
@@ -24,6 +25,9 @@ app = Flask(__name__,
 # Global configuration manager
 config_manager: ConfigManager = None
 network_manager: NetworkManager = None
+
+# Event to signal onboarding completion (matches ESP32 behavior)
+onboarding_complete_event = threading.Event()
 
 
 def init_onboarding(config: Dict):
@@ -78,16 +82,16 @@ def scan_networks():
     Scan for available WiFi networks.
     
     Returns:
-        JSON response with list of networks
+        JSON response with list of networks (matches ESP32 format)
     """
     try:
         networks = network_manager.scan_networks()
         
-        # Format for frontend (matches ESP32 format)
+        # Format for frontend (matches ESP32 format exactly)
         formatted_networks = [
             {
                 'ssid': net['ssid'],
-                'rssi': net['signal'],
+                'rssi': net['rssi'],  # Already in dBm from network_manager
                 'authMode': 3 if net.get('security') else 0
             }
             for net in networks
@@ -140,6 +144,12 @@ def save_config():
         
         logger.info(f"Configuration saved: SSID={wifi_ssid}")
         
+        # Signal onboarding completion (matches ESP32 ONBOARDING_COMPLETE_BIT)
+        # The run_onboarding_server() function is waiting on this event
+        onboarding_complete_event.set()
+        
+        logger.info("Onboarding complete event set")
+        
         return jsonify({
             'message': 'Configuration saved. Device will continue with the new settings.'
         })
@@ -152,15 +162,16 @@ def save_config():
 @app.route('/favicon.ico')
 def favicon():
     """
-    Serve favicon (simple SVG).
+    Serve favicon (location pin icon, matches ESP32).
     
     Returns:
         SVG favicon
     """
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="40" fill="#4CAF50"/>
-        <path d="M50 30 L50 70 M30 50 L70 50" stroke="white" stroke-width="8"/>
-    </svg>'''
+    svg = '''<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect width='64' height='64' rx='14' fill='#111827'/>
+    <path d='M32 12c8 0 14 6 14 14 0 11-14 26-14 26S18 37 18 26c0-8 6-14 14-14Z' fill='#22c55e'/>
+    <circle cx='32' cy='26' r='6' fill='#0f172a'/>
+</svg>'''
     return svg, 200, {'Content-Type': 'image/svg+xml'}
 
 
@@ -168,22 +179,46 @@ def run_onboarding_server(config: Dict, host: str = '0.0.0.0', port: int = 80):
     """
     Run onboarding web server.
     
+    Blocks until configuration is saved (matches ESP32 behavior).
+    
     Args:
         config: Configuration dictionary
         host: Host to bind to (default: 0.0.0.0)
         port: Port to bind to (default: 80)
     """
+    global onboarding_complete_event
+    
+    # Reset event
+    onboarding_complete_event.clear()
+    
     init_onboarding(config)
     
     logger.info(f"Starting onboarding server on {host}:{port}")
+    logger.info("Waiting for configuration... (matches ESP32 portMAX_DELAY behavior)")
     
-    # Run Flask app
-    app.run(
-        host=host,
-        port=port,
-        debug=False,
-        threaded=True
+    # Run Flask app in a separate thread
+    server_thread = threading.Thread(
+        target=lambda: app.run(
+            host=host,
+            port=port,
+            debug=False,
+            threaded=True,
+            use_reloader=False
+        ),
+        daemon=True
     )
+    server_thread.start()
+    
+    # Wait for onboarding completion (matches ESP32 xEventGroupWaitBits with portMAX_DELAY)
+    onboarding_complete_event.wait()
+    
+    logger.info("Onboarding complete, configuration saved")
+    
+    # Give time for the final HTTP response to be sent before continuing
+    # The Flask server thread is a daemon thread, so it will be terminated
+    # automatically when the main thread continues (matches ESP32 behavior)
+    import time
+    time.sleep(2)
 
 
 if __name__ == '__main__':

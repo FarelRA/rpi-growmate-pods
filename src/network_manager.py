@@ -29,7 +29,9 @@ AP_PASSWORD = "growmate"
 
 # Configuration file paths
 HOSTAPD_CONF = "/etc/hostapd/hostapd.conf"
+HOSTAPD_TEMPLATE = "/opt/growmate/config/hostapd.conf.template"
 DNSMASQ_CONF = "/etc/dnsmasq.conf"
+DNSMASQ_TEMPLATE = "/opt/growmate/config/dnsmasq.conf.template"
 WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf"
 
 # Timeouts
@@ -91,10 +93,11 @@ class NetworkManager:
         Scan for available WiFi networks.
         
         Returns:
-            List of network dictionaries with ssid, signal, security
+            List of network dictionaries with ssid, rssi (dBm), security
         """
         try:
-            # Use nmcli to scan networks
+            # Use nmcli to scan networks and get RSSI in dBm
+            # Request SSID, SIGNAL (percentage), and SECURITY
             result = self._run_command([
                 'nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY',
                 'device', 'wifi', 'list'
@@ -108,13 +111,18 @@ class NetworkManager:
                 parts = line.split(':')
                 if len(parts) >= 2:
                     ssid = parts[0]
-                    signal = int(parts[1]) if parts[1].isdigit() else 0
+                    signal_percent = int(parts[1]) if parts[1].isdigit() else 0
                     security = parts[2] if len(parts) > 2 else ''
+                    
+                    # Convert signal percentage to approximate RSSI in dBm
+                    # Formula: RSSI = -100 + (signal_percent * 0.7)
+                    # This gives range from -100 dBm (0%) to -30 dBm (100%)
+                    rssi = int(-100 + (signal_percent * 0.7))
                     
                     if ssid:  # Skip empty SSIDs
                         networks.append({
                             'ssid': ssid,
-                            'signal': signal,
+                            'rssi': rssi,  # Changed from 'signal' to 'rssi'
                             'security': security
                         })
             
@@ -124,6 +132,40 @@ class NetworkManager:
         except Exception as e:
             logger.error(f"Failed to scan networks: {e}")
             return []
+    
+    def _generate_hostapd_conf(self) -> bool:
+        """
+        Generate hostapd.conf from template with dynamic SSID.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Read template
+            template_path = Path(HOSTAPD_TEMPLATE)
+            if not template_path.exists():
+                # Try relative path if absolute doesn't exist
+                template_path = Path(__file__).parent.parent / "config" / "hostapd.conf.template"
+            
+            if not template_path.exists():
+                logger.error(f"hostapd template not found: {template_path}")
+                return False
+            
+            template_content = template_path.read_text()
+            
+            # Replace SSID placeholder
+            config_content = template_content.replace('GrowMate-XXXXXX', self.ap_ssid)
+            
+            # Write to hostapd.conf
+            conf_path = Path(HOSTAPD_CONF)
+            conf_path.write_text(config_content)
+            
+            logger.info(f"Generated hostapd.conf with SSID: {self.ap_ssid}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to generate hostapd.conf: {e}")
+            return False
     
     def start_ap_mode(self) -> bool:
         """
@@ -135,8 +177,14 @@ class NetworkManager:
         try:
             logger.info(f"Starting AP mode: {self.ap_ssid}")
             
+            # Generate hostapd.conf with correct SSID
+            if not self._generate_hostapd_conf():
+                logger.error("Failed to generate hostapd configuration")
+                return False
+            
             # Stop any existing network services
             self._run_command(['systemctl', 'stop', 'wpa_supplicant'], check=False)
+            self._run_command(['systemctl', 'stop', 'NetworkManager'], check=False)
             
             # Configure network interface
             self._run_command(['ip', 'link', 'set', WLAN_INTERFACE, 'down'])
@@ -174,6 +222,9 @@ class NetworkManager:
             # Reset network interface
             self._run_command(['ip', 'link', 'set', WLAN_INTERFACE, 'down'], check=False)
             self._run_command(['ip', 'addr', 'flush', 'dev', WLAN_INTERFACE], check=False)
+            
+            # Restart NetworkManager if it was stopped
+            self._run_command(['systemctl', 'start', 'NetworkManager'], check=False)
             
             logger.info("AP mode stopped")
             return True

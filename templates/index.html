@@ -1,178 +1,74 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset='utf-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
     <title>GrowMate Setup</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body{font-family:system-ui,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}
+        .wrap{max-width:760px;margin:0 auto;padding:24px}
+        .card{background:#111827;border:1px solid #1f2937;border-radius:18px;padding:20px}
+        h1{margin-top:0}
+        label{display:block;margin:14px 0 6px}
+        input,select{width:100%;padding:12px;border-radius:12px;border:1px solid #334155;background:#020617;color:#e2e8f0}
+        button{margin-top:18px;padding:12px 16px;border:0;border-radius:12px;background:#22c55e;color:#052e16;font-weight:700;cursor:pointer}
+        button.secondary{background:#1e293b;color:#e2e8f0}
+        .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .hint{color:#94a3b8;font-size:14px}
+        #status{margin-top:16px;white-space:pre-wrap}
+    </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🌱 GrowMate Setup</h1>
-            <p class="subtitle">Configure your plant monitoring device</p>
-        </div>
-
-        <div class="card">
-            <h2>Device Information</h2>
-            <div class="info-row">
-                <span class="label">Device ID:</span>
-                <span class="value" id="deviceId">Loading...</span>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>WiFi Configuration</h2>
-            
-            <form id="configForm">
-                <div class="form-group">
-                    <label for="wifiSsid">WiFi Network</label>
-                    <div class="input-with-button">
-                        <select id="wifiSsid" name="wifiSsid" required>
-                            <option value="">Select a network...</option>
-                        </select>
-                        <button type="button" id="scanButton" class="btn-secondary">Scan</button>
-                    </div>
-                    <div id="scanStatus" class="status-message"></div>
-                </div>
-
-                <div class="form-group">
-                    <label for="wifiPassword">WiFi Password</label>
-                    <input type="password" id="wifiPassword" name="wifiPassword" 
-                           placeholder="Enter WiFi password" required>
-                </div>
-
-                <div class="form-actions">
-                    <button type="submit" class="btn-primary" id="submitButton">
-                        Save and Continue
-                    </button>
-                </div>
-            </form>
-
-            <div id="errorMessage" class="error-message" style="display: none;"></div>
-            <div id="successMessage" class="success-message" style="display: none;"></div>
-        </div>
-
-        <div class="footer">
-            <p>After saving, your device will connect to the configured WiFi network and begin monitoring.</p>
+    <div class='wrap'>
+        <div class='card'>
+            <h1>GrowMate onboarding</h1>
+            <p class='hint'>Connect this device to WiFi. Device identity and cloud-side configuration are managed by GrowMate, not by the end user.</p>
+            <label>Device ID</label>
+            <input id='deviceId' disabled>
+            <button class='secondary' id='scanBtn' type='button'>Scan WiFi</button>
+            <label>WiFi network</label>
+            <select id='ssid'></select>
+            <label>WiFi password</label>
+            <input id='password' type='password' placeholder='WiFi password'>
+            <button id='saveBtn' type='button'>Save and continue</button>
+            <div id='status' class='hint'></div>
         </div>
     </div>
-
     <script>
-        // Load device information
-        async function loadDeviceInfo() {
-            try {
-                const response = await fetch('/api/config');
-                const data = await response.json();
-                document.getElementById('deviceId').textContent = data.deviceId;
-            } catch (error) {
-                console.error('Failed to load device info:', error);
-                document.getElementById('deviceId').textContent = 'Error loading';
+        async function getConfig(){const r=await fetch('/api/config');return r.json()}
+        async function scan(){
+            status('Scanning WiFi...');
+            const r=await fetch('/api/networks');
+            const items=await r.json();
+            const el=document.getElementById('ssid');
+            el.innerHTML='';
+            items.networks.forEach(n=>{
+                const o=document.createElement('option');
+                o.value=n.ssid;
+                o.textContent=`${n.ssid} (${n.rssi} dBm)`;
+                el.appendChild(o)
+            });
+            if(!items.networks.length){
+                const o=document.createElement('option');
+                o.value='';
+                o.textContent='No networks found';
+                el.appendChild(o)
             }
+            status('WiFi scan complete.')
         }
-
-        // Scan for WiFi networks
-        async function scanNetworks() {
-            const scanButton = document.getElementById('scanButton');
-            const scanStatus = document.getElementById('scanStatus');
-            const wifiSelect = document.getElementById('wifiSsid');
-            
-            scanButton.disabled = true;
-            scanButton.textContent = 'Scanning...';
-            scanStatus.textContent = 'Scanning for networks...';
-            scanStatus.className = 'status-message';
-            
-            try {
-                const response = await fetch('/api/networks');
-                const data = await response.json();
-                
-                // Clear existing options
-                wifiSelect.innerHTML = '<option value="">Select a network...</option>';
-                
-                // Add networks
-                if (data.networks && data.networks.length > 0) {
-                    data.networks.forEach(network => {
-                        const option = document.createElement('option');
-                        option.value = network.ssid;
-                        option.textContent = `${network.ssid} (${network.rssi} dBm)`;
-                        wifiSelect.appendChild(option);
-                    });
-                    scanStatus.textContent = `Found ${data.networks.length} network(s)`;
-                    scanStatus.className = 'status-message success';
-                } else {
-                    scanStatus.textContent = 'No networks found';
-                    scanStatus.className = 'status-message error';
-                }
-            } catch (error) {
-                console.error('Scan failed:', error);
-                scanStatus.textContent = 'Scan failed. Please try again.';
-                scanStatus.className = 'status-message error';
-            } finally {
-                scanButton.disabled = false;
-                scanButton.textContent = 'Scan';
-            }
+        function status(v){document.getElementById('status').textContent=v}
+        function setValue(id,v){document.getElementById(id).value=v ?? ''}
+        async function load(){const cfg=await getConfig();setValue('deviceId',cfg.deviceId);await scan()}
+        async function save(){
+            const body={wifiSsid:document.getElementById('ssid').value,wifiPassword:document.getElementById('password').value};
+            status('Saving configuration...');
+            const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            const json=await r.json();
+            status(json.message || 'Saved');
         }
-
-        // Save configuration
-        async function saveConfig(event) {
-            event.preventDefault();
-            
-            const submitButton = document.getElementById('submitButton');
-            const errorMessage = document.getElementById('errorMessage');
-            const successMessage = document.getElementById('successMessage');
-            
-            submitButton.disabled = true;
-            submitButton.textContent = 'Saving...';
-            errorMessage.style.display = 'none';
-            successMessage.style.display = 'none';
-            
-            const formData = {
-                wifiSsid: document.getElementById('wifiSsid').value,
-                wifiPassword: document.getElementById('wifiPassword').value
-            };
-            
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    successMessage.textContent = data.message || 'Configuration saved successfully!';
-                    successMessage.style.display = 'block';
-                    
-                    // Redirect to success page after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = '/success';
-                    }, 2000);
-                } else {
-                    errorMessage.textContent = data.error || 'Failed to save configuration';
-                    errorMessage.style.display = 'block';
-                    submitButton.disabled = false;
-                    submitButton.textContent = 'Save and Continue';
-                }
-            } catch (error) {
-                console.error('Save failed:', error);
-                errorMessage.textContent = 'Network error. Please try again.';
-                errorMessage.style.display = 'block';
-                submitButton.disabled = false;
-                submitButton.textContent = 'Save and Continue';
-            }
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadDeviceInfo();
-            scanNetworks(); // Auto-scan on load
-            
-            document.getElementById('scanButton').addEventListener('click', scanNetworks);
-            document.getElementById('configForm').addEventListener('submit', saveConfig);
-        });
+        document.getElementById('scanBtn').onclick=scan;
+        document.getElementById('saveBtn').onclick=save;
+        load();
     </script>
 </body>
 </html>
