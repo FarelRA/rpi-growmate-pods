@@ -9,7 +9,6 @@ Type=simple
 User=__USER__
 Group=__USER__
 WorkingDirectory=/home/__USER__/growmate
-ExecStartPre=/usr/bin/tailscale status
 ExecStart=/home/__USER__/growmate/start.sh
 
 Restart=always

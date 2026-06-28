@@ -885,7 +885,7 @@ sudo systemctl status growmate
 sudo journalctl -u growmate -n 50
 
 # Common causes:
-# 1. Tailscale not connected — check ExecStartPre
+# 1. Tailscale not connected — check 'tailscale status'
 # 2. DEVICE_API_KEY or DEVICE_ID not set in service file
 # 3. start.sh not executable: chmod +x /home/grow/growmate/*.sh
 

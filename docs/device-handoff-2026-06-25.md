@@ -381,7 +381,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStartPre=/usr/bin/tailscale status
 ExecStart=/home/grow/growmate/start.sh
 Restart=always
 RestartSec=10

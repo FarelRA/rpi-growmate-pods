@@ -161,8 +161,8 @@ The V2 handoff specifies behavior. The local-first foundation is how we implemen
                        └───────────────────────┬──────────────────────────────┘
                                                │
             ┌──────────────────────────────────┼──────────────────────────────┐
-            │  systemd growmate.service        │  Env: DEVICE_API_KEY,        │
-            │  (ExecStartPre: tailscale status) │        DEVICE_ID             │
+             │  systemd growmate.service        │  Env: DEVICE_API_KEY,        │
+             │  (Tailscale handled by start.sh)  │        DEVICE_ID             │
             └──────────────────────────────────┴──────────────────────────────┘
                                                │
                                       ┌────────▼─────────┐
@@ -777,7 +777,6 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStartPre=/usr/bin/tailscale status
 ExecStart=/home/grow/growmate/start.sh
 Restart=always
 RestartSec=10
@@ -792,8 +791,7 @@ WantedBy=multi-user.target
 Changes from V1 service:
 - `ExecStart` → `/home/grow/growmate/start.sh`
 - `WorkingDirectory` → `/home/grow/growmate`
-- `User` → `pi` (not root)
-- Add `ExecStartPre` for Tailscale check
+- `User` → `grow` (not root)
 - Add `Environment` for API key and device ID
 - Remove `PYTHONUNBUFFERED`
 - Remove onboarding service references
