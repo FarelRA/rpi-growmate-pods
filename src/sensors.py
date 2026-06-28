@@ -4,6 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 import board
 import busio
+from adafruit_ads1x15.ads1x15 import Pin
 import adafruit_ads1x15.ads1115 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import adafruit_dht
@@ -130,7 +131,7 @@ class SensorReader:
             "battery": {"consecutive_failures": 0, "degraded": False},
         }
 
-        ch_map = {acs712_ch: ADS.P0, light_ch: ADS.P1, water_ch: ADS.P2, soil_ch: ADS.P3}
+        ch_map = {acs712_ch: Pin.A0, light_ch: Pin.A1, water_ch: Pin.A2, soil_ch: Pin.A3}
 
         try:
             self.i2c = busio.I2C(board.SCL, board.SDA)

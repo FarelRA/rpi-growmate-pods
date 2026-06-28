@@ -599,6 +599,11 @@ set_permissions() {
     [ -f "$INSTALL_DIR/start.sh" ] && chmod +x "$INSTALL_DIR/start.sh"
     [ -f "$INSTALL_DIR/scripts/start.sh" ] && chmod +x "$INSTALL_DIR/scripts/start.sh"
 
+    # Allow grow user to write hostapd.conf (runtime AP mode)
+    touch /etc/hostapd/hostapd.conf 2>/dev/null || true
+    chown root:"$TARGET_USER" /etc/hostapd/hostapd.conf 2>/dev/null || true
+    chmod 664 /etc/hostapd/hostapd.conf 2>/dev/null || true
+
     log_success "Permissions set"
 }
 

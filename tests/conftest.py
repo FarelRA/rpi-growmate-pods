@@ -19,7 +19,7 @@ _HARDWARE_MODULES = [
     "RPi", "RPi.GPIO",
     "board",
     "busio",
-    "adafruit_ads1x15", "adafruit_ads1x15.ads1115", "adafruit_ads1x15.analog_in",
+    "adafruit_ads1x15", "adafruit_ads1x15.ads1115", "adafruit_ads1x15.analog_in", "adafruit_ads1x15.ads1x15",
     "adafruit_blinka",
     "adafruit_dht",
     "adafruit_circuitpython_dht",
@@ -67,10 +67,12 @@ _parent_ada.ads1115 = _ads_mod
 _parent_ada.analog_in = _ana_mod
 
 _ads_mod.ADS1115 = MagicMock()
-_ads_mod.P0 = 0
-_ads_mod.P1 = 1
-_ads_mod.P2 = 2
-_ads_mod.P3 = 3
+_ads_base_mod = sys.modules["adafruit_ads1x15.ads1x15"]
+_ads_base_mod.Pin = MagicMock()
+_ads_base_mod.Pin.A0 = 0
+_ads_base_mod.Pin.A1 = 1
+_ads_base_mod.Pin.A2 = 2
+_ads_base_mod.Pin.A3 = 3
 
 _ana_mod.AnalogIn = MagicMock()
 
