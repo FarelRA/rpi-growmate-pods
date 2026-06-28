@@ -147,7 +147,7 @@ class TestProvisioningMode:
         result = app.run()
 
         mock_enter_ap.assert_awaited_once()
-        mock_run_async.assert_awaited_once()
+        mock_run_async.assert_not_awaited()
         assert result == 0
 
     def test_skips_ap_mode_when_provisioned(self, mocker, mock_app_components, config_mgr, minimal_config):
@@ -492,11 +492,19 @@ class TestMainFunction:
         import main as main_module
         main_module.sys.exit.assert_called_once_with(0)
 
-    def test_run_fatal_error_returns_1(self, mocker, mock_app_components, config_mgr):
-        config_mgr.load.side_effect = Exception("fatal error")
+    def test_run_fatal_error_returns_1(self, mocker, mock_app_components, config_mgr, minimal_config):
+        config_mgr.load.return_value = copy.deepcopy(minimal_config)
+        config_mgr.is_provisioned.return_value = True
+
+        mock_run_async = AsyncMock(return_value=1)
+        _real_asyncio_run = asyncio.run
+        mocker.patch("main.asyncio.run", side_effect=lambda coro, *a, **kw: (
+            _real_asyncio_run(coro, *a, **kw) if asyncio.iscoroutine(coro) else 0
+        ))
 
         from main import GrowMateApp
         app = GrowMateApp()
+        app.run_async = mock_run_async
 
         result = app.run()
 

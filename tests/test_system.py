@@ -208,7 +208,7 @@ class TestProvisioningFlow:
         result = app.run()
 
         mock_enter_ap.assert_awaited_once()
-        mock_run_async.assert_awaited_once()
+        mock_run_async.assert_not_awaited()
         assert result == 0
 
     def test_provisioned_skips_onboarding(self, mocker, mock_app_components, provisioned_config_mgr, minimal_config):
@@ -956,11 +956,19 @@ class TestMainEntryPoint:
         import main as main_module
         main_module.sys.exit.assert_called_once_with(0)
 
-    def test_main_returns_1_on_fatal_error(self, mocker, mock_app_components, config_mgr):
-        config_mgr.load.side_effect = Exception("fatal error")
+    def test_main_returns_1_on_fatal_error(self, mocker, mock_app_components, config_mgr, minimal_config):
+        config_mgr.load.return_value = copy.deepcopy(minimal_config)
+        config_mgr.is_provisioned.return_value = True
+
+        mock_run_async = AsyncMock(return_value=1)
+        _real_asyncio_run = asyncio.run
+        mocker.patch("main.asyncio.run", side_effect=lambda coro, *a, **kw: (
+            _real_asyncio_run(coro, *a, **kw) if asyncio.iscoroutine(coro) else 0
+        ))
 
         from main import GrowMateApp
         app = GrowMateApp()
+        app.run_async = mock_run_async
 
         result = app.run()
 

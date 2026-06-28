@@ -131,6 +131,16 @@ class GrowMateApp:
         try:
             logger.info("Initializing components...")
 
+            # Force relay pins LOW before any gpiozero init to prevent glitches
+            import RPi.GPIO as _GPIO
+            _GPIO.setmode(_GPIO.BCM)
+            act_cfg = self.config.get('actuators', {}).get('pins', {})
+            for _pin in [act_cfg.get(k, 0) for k in ('pump', 'fertilizer', 'pesticide')]:
+                if _pin:
+                    _GPIO.setup(_pin, _GPIO.OUT, initial=_GPIO.LOW)
+                    _GPIO.output(_pin, _GPIO.LOW)
+            _GPIO.cleanup()
+
             sensors_cfg = self.config.get('sensors', {})
             self.sensors = SensorReader(sensors_cfg)
             logger.info("Sensors initialized (V2)")
@@ -755,9 +765,10 @@ class GrowMateApp:
             self.load_configuration()
 
             if not self.config_manager.is_provisioned():
-                logger.info("Device not provisioned, entering onboarding mode")
+                logger.info("Device not provisioned — dormant AP mode only")
                 asyncio.run(self.enter_onboarding_mode())
-                self.load_configuration()
+                logger.info("Onboarding complete, exiting for restart with full stack")
+                return 0
 
             return asyncio.run(self.run_async())
 
