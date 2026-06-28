@@ -65,7 +65,7 @@ The installer:
 1. Installs system deps (rpicam-apps, hostapd, dnsmasq, i2c-tools, etc.)
 2. Enables I2C
 3. Configures AP mode support (hostapd + dnsmasq for first-time setup)
-4. Copies source files to `/home/pi/growmate/`
+4. Copies source files to `/home/grow/growmate/`
 5. Installs Python deps
 6. Installs Tailscale
 7. Installs and starts systemd service

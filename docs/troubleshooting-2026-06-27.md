@@ -594,7 +594,7 @@ sudo nano /etc/systemd/journald.conf
 **Recovery:**
 ```bash
 # Backup data
-sudo cp -r /etc/growmate /home/pi/growmate-backup
+sudo cp -r /etc/growmate /home/grow/growmate-backup
 
 # Check filesystem
 sudo fsck -f /dev/mmcblk0p2
@@ -887,7 +887,7 @@ sudo journalctl -u growmate -n 50
 # Common causes:
 # 1. Tailscale not connected — check ExecStartPre
 # 2. DEVICE_API_KEY or DEVICE_ID not set in service file
-# 3. start.sh not executable: chmod +x /home/pi/growmate/*.sh
+# 3. start.sh not executable: chmod +x /home/grow/growmate/*.sh
 
 # Verify environment variables in service
 sudo systemctl cat growmate
@@ -897,7 +897,7 @@ sudo systemctl cat growmate
 
 ```bash
 # Run main.py manually to see errors
-sudo -u pi DEVICE_API_KEY=test DEVICE_ID=test python3 /home/pi/growmate/main.py
+sudo -u grow DEVICE_API_KEY=test DEVICE_ID=test python3 /home/grow/growmate/main.py
 
 # Check for missing Python packages
 pip3 list | grep -E "ads1x15|circuitpython-dht|RPi.GPIO"

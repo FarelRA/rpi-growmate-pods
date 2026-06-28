@@ -71,18 +71,18 @@ Verify: `tailscale status` and note the Tailscale IP (`tailscale ip -4`).
 ### 6. Create Project Structure
 
 ```bash
-mkdir -p /home/pi/growmate
+mkdir -p /home/grow/growmate
 ```
 
 Copy these files onto the device (via SCP or Git):
 
 | File | Destination |
 |------|------------|
-| `main.py` | `/home/pi/growmate/main.py` |
-| `start.sh` | `/home/pi/growmate/start.sh` |
+| `main.py` | `/home/grow/growmate/main.py` |
+| `start.sh` | `/home/grow/growmate/start.sh` |
 
 ```bash
-chmod +x /home/pi/growmate/*.sh
+chmod +x /home/grow/growmate/*.sh
 ```
 
 ### 7. Configure Environment
@@ -322,10 +322,10 @@ Wants=network-online.target
 
 [Service]
 ExecStartPre=/usr/bin/tailscale status
-ExecStart=/home/pi/growmate/start.sh
+ExecStart=/home/grow/growmate/start.sh
 Restart=always
 RestartSec=10
-User=pi
+User=grow
 Environment=DEVICE_API_KEY=<set during provisioning>
 Environment=DEVICE_ID=<unique device ID, set during provisioning>
 

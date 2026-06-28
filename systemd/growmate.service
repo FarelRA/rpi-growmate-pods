@@ -6,11 +6,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/growmate
+User=__USER__
+Group=__USER__
+WorkingDirectory=/home/__USER__/growmate
 ExecStartPre=/usr/bin/tailscale status
-ExecStart=/home/pi/growmate/start.sh
+ExecStart=/home/__USER__/growmate/start.sh
 
 Restart=always
 RestartSec=10

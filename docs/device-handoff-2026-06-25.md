@@ -12,8 +12,8 @@ Four deliverables for the Raspberry Pi Zero W v1.1:
 
 | # | Deliverable | Location | Description |
 | --- | --- | --- | --- |
-| 1 | `main.py` | On-device: `/home/pi/growmate/main.py` | Python main loop: ADS1115 reads, DHT22, GPIO actuator control, command execution, 60s POST interval |
-| 2 | `scripts/start.sh` | On-device: `/home/pi/growmate/scripts/start.sh` | Startup script: rpicam-vid daemon, Tailscale check, stream registration, then `main.py` |
+| 1 | `main.py` | On-device: `/home/grow/growmate/main.py` | Python main loop: ADS1115 reads, DHT22, GPIO actuator control, command execution, 60s POST interval |
+| 2 | `scripts/start.sh` | On-device: `/home/grow/growmate/scripts/start.sh` | Startup script: rpicam-vid daemon, Tailscale check, stream registration, then `main.py` |
 | 3 | `growmate.service` | On-device: `/etc/systemd/system/growmate.service` | Systemd unit: dependencies, restart policy, env vars |
 | 4 | `docs/device-v2-notes-2026-06-27.md` | In-repo: `docs/device-v2-notes-2026-06-27.md` | Human-readable setup guide, hardware reference, pinout, troubleshooting |
 
@@ -382,10 +382,10 @@ Wants=network-online.target
 
 [Service]
 ExecStartPre=/usr/bin/tailscale status
-ExecStart=/home/pi/growmate/start.sh
+ExecStart=/home/grow/growmate/start.sh
 Restart=always
 RestartSec=10
-User=pi
+User=grow
 Environment=DEVICE_API_KEY=<set during provisioning>
 Environment=DEVICE_ID=<unique device ID, set during provisioning>
 
@@ -423,13 +423,13 @@ Requirements:
    ```
 7. **Create project structure** (handled by install.sh):
    ```bash
-   mkdir -p /home/pi/growmate
-   cp -r src/ /home/pi/growmate/
-   cp config/config.yaml.example /home/pi/growmate/config/config.yaml
-   cp scripts/start.sh /home/pi/growmate/
-   cp templates /home/pi/growmate/
-   cp static /home/pi/growmate/
-   chmod +x /home/pi/growmate/scripts/*.sh
+   mkdir -p /home/grow/growmate
+   cp -r src/ /home/grow/growmate/
+   cp config/config.yaml.example /home/grow/growmate/config/config.yaml
+   cp scripts/start.sh /home/grow/growmate/
+   cp templates /home/grow/growmate/
+   cp static /home/grow/growmate/
+   chmod +x /home/grow/growmate/scripts/*.sh
    ```
 8. **Generate config.yaml** — install.sh prompts for API key, device ID, WiFi credentials, log level
 9. **Install systemd service**: Copy `systemd/growmate.service` to `/etc/systemd/system/`, then `sudo systemctl enable growmate`

@@ -318,7 +318,7 @@ the `sensors.calibration.*.min` / `.max` bounds.
 
 ```bash
 # Read raw ADC values for each sensor
-sudo python3 /home/pi/growmate/scripts/test_hardware.py
+sudo python3 /home/grow/growmate/scripts/test_hardware.py
 ```
 
 1. **Soil moisture:** Read in dry air (min) and fully submerged (max)

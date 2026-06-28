@@ -647,7 +647,7 @@ Now lives in the scripts directory:
 # Orchestrates: Tailscale → rpicam-vid → stream registration → main.py
 set -e
 
-PROJECT_DIR="/home/pi/growmate"
+PROJECT_DIR="/home/grow/growmate"
 
 echo "[start.sh] Checking Tailscale..."
 tailscale status || tailscale up
@@ -778,10 +778,10 @@ Wants=network-online.target
 
 [Service]
 ExecStartPre=/usr/bin/tailscale status
-ExecStart=/home/pi/growmate/start.sh
+ExecStart=/home/grow/growmate/start.sh
 Restart=always
 RestartSec=10
-User=pi
+User=grow
 Environment=DEVICE_API_KEY=<set-during-provisioning>
 Environment=DEVICE_ID=<set-during-provisioning>
 
@@ -790,8 +790,8 @@ WantedBy=multi-user.target
 ```
 
 Changes from V1 service:
-- `ExecStart` → `/home/pi/growmate/start.sh`
-- `WorkingDirectory` → `/home/pi/growmate`
+- `ExecStart` → `/home/grow/growmate/start.sh`
+- `WorkingDirectory` → `/home/grow/growmate`
 - `User` → `pi` (not root)
 - Add `ExecStartPre` for Tailscale check
 - Add `Environment` for API key and device ID
@@ -885,8 +885,8 @@ The `failure_monitor_job` also retains the onboarding fallback — after `FAILUR
    - Keep Flask/templates/static copy (served during AP mode)
    - Add rpicam-apps to system deps
    - Add Tailscale install step (`curl -fsSL https://tailscale.com/install.sh | sh`)
-   - Copy `main.py` and `scripts/start.sh` to `/home/pi/growmate/`
-   - Set `chmod +x /home/pi/growmate/*.sh`
+   - Copy `main.py` and `scripts/start.sh` to `/home/grow/growmate/`
+   - Set `chmod +x /home/grow/growmate/*.sh`
    - Update display messages for V2 (AP mode for first-time setup, Tailscale for day-to-day)
    - **Keep interactive config.yaml creation** (V2 uses YAML config as primary, env vars as overrides)
 
@@ -981,7 +981,7 @@ The `failure_monitor_job` also retains the onboarding fallback — after `FAILUR
 | `src/config_validator.py` | P4 | V2 schema updates, remove camera/network validation | Validate `DEVICE_API_KEY` non-empty, `DEVICE_ID` format, interval >= 10s |
 | `src/camera_service.py` | P3 | Rewrite as rpicam-vid process manager | Watchdog PID check; auto-restart on crash; crash counter |
 | `systemd/growmate.service` | P4 | V2 service with env vars, start.sh, pi user | N/A (systemd level) |
-| `scripts/install.sh` | P5 | Keep AP mode (hostapd + dnsmasq), add Tailscale, update paths | Install to `/home/pi/growmate/`; `chmod +x *.sh` |
+| `scripts/install.sh` | P5 | Keep AP mode (hostapd + dnsmasq), add Tailscale, update paths | Install to `/home/grow/growmate/`; `chmod +x *.sh` |
 | `README.md` | P5 | V2 setup, Tailscale, env vars, AP mode onboarding | Document local-first features (queue, circuit breaker, health monitor, hot-reload) |
 
 ### Files to Remove (7 — never existed; listed in plan but not in repo)
@@ -1047,7 +1047,7 @@ The handoff spec proposed Tailscale-only connectivity. The actual implementation
 | **G5** | P3 | `rpicam-vid` starts from `start.sh`. Stream register succeeds. Verifiable in browser dashboard. | Kill rpicam-vid → health monitor restarts it within 30s. 5+ crashes in 1h → UNHEALTHY. |
 | **G6** | P3 | `grep -r "picamera2\|piexif\|raspistill\|raspivid" src/` returns nothing. | Camera crash counter exposed in health monitor metrics. |
 | **G7** | P4 | Network manager + onboarding portal present; AP mode starts on unprovisioned boot. | `tailscale status` failure → health monitor reports "TAILSCALE_DISCONNECTED". No crash. Device still serves AP mode for recovery. |
-| **G8** | P4 | Service file has `Environment=DEVICE_API_KEY`, `Environment=DEVICE_ID`, `ExecStart=...start.sh`, `User=pi`. | Health monitor publishes Tailscale IP every 5 min. Any YAML key overridable via env var `GROWMATE_<KEY>`. `Failure monitor re-enters onboarding on excessive failures.` |
+| **G8** | P4 | Service file has `Environment=DEVICE_API_KEY`, `Environment=DEVICE_ID`, `ExecStart=...start.sh`, `User=grow`. | Health monitor publishes Tailscale IP every 5 min. Any YAML key overridable via env var `GROWMATE_<KEY>`. `Failure monitor re-enters onboarding on excessive failures.` |
 | **G9** | P5 | `test_hardware.py` tests V2 pins (pump=10, fertilizer=17, pesticide=27), all 4 ADC channels, ACS712, limit switches. | Tests also verify debounce behavior, health monitor output format, circuit breaker state transitions. |
 | **G10** | P5 | `pip install -r requirements.txt` succeeds. No picamera2/piexif (flask/werkzeug kept for AP mode onboarding). | `sqlite3 /var/lib/growmate/queue.db ".tables"` shows only `sensor_queue` and `queue_metadata` (no image_queue). |
 
