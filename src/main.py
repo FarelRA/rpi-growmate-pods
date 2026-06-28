@@ -50,7 +50,7 @@ from network_manager import NetworkManager
 from onboarding_portal import run_onboarding_server
 from queue_manager import QueueManager
 from upload_processor import UploadProcessor
-from health_monitor import HealthMonitor
+from health_monitor import HealthMonitor, run_health_monitor
 from config_watcher import ConfigWatcher
 from utils import (
     SENSOR_INTERVAL_SECONDS,
@@ -128,11 +128,10 @@ class GrowMateApp:
 
             return False
 
-    async def initialize_components(self) -> bool:
-        try:
-            logger.info("Initializing components...")
+    async def initialize_components(self) -> None:
+        logger.info("Initializing components...")
 
-            # Force relay pins LOW before any gpiozero init to prevent glitches
+        try:
             import RPi.GPIO as _GPIO
             _GPIO.setmode(_GPIO.BCM)
             act_cfg = self.config.get('actuators', {}).get('pins', {})
@@ -141,57 +140,72 @@ class GrowMateApp:
                     _GPIO.setup(_pin, _GPIO.OUT, initial=_GPIO.LOW)
                     _GPIO.output(_pin, _GPIO.LOW)
             _GPIO.cleanup()
+        except Exception as e:
+            logger.warning(f"GPIO init failed: {e}")
 
+        try:
             sensors_cfg = self.config.get('sensors', {})
             self.sensors = SensorReader(sensors_cfg)
-            logger.info("Sensors initialized (V2)")
+            logger.info("Sensors initialized")
+        except Exception as e:
+            logger.warning(f"Sensors init failed: {e}")
 
+        try:
             actuators_cfg = self.config.get('actuators', {})
             self.actuators = ActuatorController(actuators_cfg)
-            logger.info("Actuators initialized (V2)")
+            logger.info("Actuators initialized")
+        except Exception as e:
+            logger.warning(f"Actuators init failed: {e}")
 
+        try:
             self.api_client = APIClient(self.config)
             await self.api_client.initialize()
-            logger.info("API client initialized (V2)")
+            logger.info("API client initialized")
+        except Exception as e:
+            logger.warning(f"API client init failed: {e}")
+            self.api_client = None
 
+        try:
             camera_cfg = self.config.get('camera', {})
             self.camera = CameraService(camera_cfg)
             if self.camera.start_stream():
-                logger.info("Camera stream initialized (rpicam-vid)")
+                logger.info("Camera stream initialized")
             else:
-                logger.warning(
-                    "Camera stream failed to start, watchdog will retry"
-                )
+                logger.warning("Camera stream failed to start, watchdog will retry")
+        except Exception as e:
+            logger.warning(f"Camera init failed: {e}")
+            self.camera = None
 
-            try:
-                self.network = NetworkManager(self.config)
-                logger.info("Network manager initialized")
-            except Exception as e:
-                logger.warning(f"Failed to initialize network manager: {e}")
-                self.network = None
+        try:
+            self.network = NetworkManager(self.config)
+            logger.info("Network manager initialized")
+        except Exception as e:
+            logger.warning(f"Network manager init failed: {e}")
+            self.network = None
 
+        try:
             queue_enabled = self.config.get('queue', {}).get('enabled', True)
             if queue_enabled:
                 db_path = Path(
-                    self.config.get('queue', {}).get(
-                        'db_path', QUEUE_DATABASE_PATH
-                    )
+                    self.config.get('queue', {}).get('db_path', QUEUE_DATABASE_PATH)
                 )
-                max_entries = self.config.get('queue', {}).get(
-                    'max_sensor_entries', 1440
-                )
+                max_entries = self.config.get('queue', {}).get('max_sensor_entries', 1440)
                 self.queue = QueueManager(db_path, max_sensor_entries=max_entries)
                 if await self.queue.async_initialize():
-                    logger.info("Queue manager initialized (offline operation enabled)")
+                    logger.info("Queue manager initialized")
                 else:
-                    logger.error("Queue manager initialization failed")
-                    return False
-
-                self.upload_processor = UploadProcessor(self.queue, self.api_client, self.config)
-                logger.info("Upload processor initialized")
+                    logger.warning("Queue manager init failed")
+                    self.queue = None
+                if self.queue:
+                    self.upload_processor = UploadProcessor(self.queue, self.api_client, self.config)
+                    logger.info("Upload processor initialized")
             else:
-                logger.warning("Queue disabled in configuration, running in online-only mode")
+                logger.warning("Queue disabled, running in online-only mode")
+        except Exception as e:
+            logger.warning(f"Queue init failed: {e}")
+            self.queue = None
 
+        try:
             self.health_monitor = HealthMonitor(
                 api_client=self.api_client,
                 queue_manager=self.queue,
@@ -204,12 +218,9 @@ class GrowMateApp:
             if hm_cfg.get('camera_crash_threshold'):
                 self.health_monitor._camera_crash_threshold = hm_cfg['camera_crash_threshold']
             logger.info("Health monitor initialized")
-
-            return True
-
         except Exception as e:
-            logger.error(f"Failed to initialize components: {e}")
-            return False
+            logger.warning(f"Health monitor init failed: {e}")
+            self.health_monitor = None
 
     async def enter_onboarding_mode(self, network: Optional[NetworkManager] = None):
         logger.info("Entering onboarding mode (AP mode + web portal)")
@@ -666,15 +677,24 @@ class GrowMateApp:
             logger.info("Upload processor stopped")
 
         if self.actuators:
-            await self.actuators.async_cleanup()
+            try:
+                await self.actuators.async_cleanup()
+            except Exception as e:
+                logger.warning(f"Actuator cleanup error: {e}")
 
         if self.sensors:
-            self.sensors.cleanup()
+            try:
+                self.sensors.cleanup()
+            except Exception as e:
+                logger.warning(f"Sensor cleanup error: {e}")
 
         if self.camera:
-            logger.info("Stopping camera stream...")
-            self.camera.cleanup()
-            logger.info("Camera stream stopped")
+            try:
+                logger.info("Stopping camera stream...")
+                self.camera.cleanup()
+                logger.info("Camera stream stopped")
+            except Exception as e:
+                logger.warning(f"Camera cleanup error: {e}")
 
         if self.network:
             logger.info("Stopping AP mode if active...")
@@ -684,11 +704,17 @@ class GrowMateApp:
                 pass
 
         if self.api_client:
-            await self.api_client.cleanup()
+            try:
+                await self.api_client.cleanup()
+            except Exception as e:
+                logger.warning(f"API client cleanup error: {e}")
 
         if self.queue:
-            await self.queue.async_close()
-            logger.info("Queue manager closed")
+            try:
+                await self.queue.async_close()
+                logger.info("Queue manager closed")
+            except Exception as e:
+                logger.warning(f"Queue cleanup error: {e}")
 
         logger.info("Cleanup complete")
 
@@ -696,9 +722,7 @@ class GrowMateApp:
         logger.info("Starting async application loop (V2)")
 
         try:
-            if not await self.initialize_components():
-                logger.error("Failed to initialize components, exiting")
-                return 1
+            await self.initialize_components()
 
             await self._register_stream_with_retry()
 

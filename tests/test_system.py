@@ -168,7 +168,7 @@ class TestFullStartupShutdown:
         mock_scheduler.start.assert_called_once()
         mock_scheduler.shutdown.assert_called_once()
 
-    def test_return_code_1_on_init_failure(self, mocker, mock_app_components, provisioned_config_mgr, minimal_config):
+    def test_continues_on_init_failure(self, mocker, mock_app_components, provisioned_config_mgr, minimal_config):
         cfg = copy.deepcopy(minimal_config)
         cfg["network"]["provisioned"] = True
         cfg["network"]["wifi_ssid"] = "MyWiFi"
@@ -182,9 +182,11 @@ class TestFullStartupShutdown:
         app = GrowMateApp()
         app.config = cfg
 
+        app.shutdown_event.set()
+
         result = asyncio.run(app.run_async())
 
-        assert result == 1
+        assert result == 0
 
 
 class TestProvisioningFlow:
@@ -715,8 +717,7 @@ class TestErrorPaths:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is False
+        asyncio.run(app.initialize_components())
 
     def test_network_manager_init_failure_sets_none(self, mocker, mock_app_components, config_mgr, minimal_config):
         cfg = copy.deepcopy(minimal_config)
@@ -747,8 +748,7 @@ class TestErrorPaths:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is True
+        asyncio.run(app.initialize_components())
         assert app.network is None
 
     def test_queue_init_failure_returns_false(self, mocker, mock_app_components, config_mgr, minimal_config):
@@ -785,8 +785,7 @@ class TestErrorPaths:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is False
+        asyncio.run(app.initialize_components())
 
     def test_camera_startup_failure_logs_warning(self, mocker, mock_app_components, config_mgr, minimal_config):
         cfg = copy.deepcopy(minimal_config)
@@ -818,8 +817,7 @@ class TestErrorPaths:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is True
+        asyncio.run(app.initialize_components())
 
 
 class TestCleanupPathways:

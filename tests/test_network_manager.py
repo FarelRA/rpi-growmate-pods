@@ -237,14 +237,14 @@ class TestStartApMode:
         result = await mgr.start_ap_mode()
         assert result is True
         expected_calls = [
-            call(["sudo", "systemctl", "stop", "wpa_supplicant"], capture_output=True, text=True, check=False),
-            call(["sudo", "systemctl", "stop", "NetworkManager"], capture_output=True, text=True, check=False),
-            call(["sudo", "ip", "link", "set", "wlan0", "down"], capture_output=True, text=True, check=True),
-            call(["sudo", "ip", "addr", "flush", "dev", "wlan0"], capture_output=True, text=True, check=True),
-            call(["sudo", "ip", "addr", "add", "192.168.4.1/24", "dev", "wlan0"], capture_output=True, text=True, check=True),
-            call(["sudo", "ip", "link", "set", "wlan0", "up"], capture_output=True, text=True, check=True),
-            call(["sudo", "systemctl", "start", "hostapd"], capture_output=True, text=True, check=True),
-            call(["sudo", "systemctl", "start", "dnsmasq"], capture_output=True, text=True, check=True),
+            call(["systemctl", "stop", "wpa_supplicant"], capture_output=True, text=True, check=False),
+            call(["systemctl", "stop", "NetworkManager"], capture_output=True, text=True, check=False),
+            call(["ip", "link", "set", "wlan0", "down"], capture_output=True, text=True, check=True),
+            call(["ip", "addr", "flush", "dev", "wlan0"], capture_output=True, text=True, check=True),
+            call(["ip", "addr", "add", "192.168.4.1/24", "dev", "wlan0"], capture_output=True, text=True, check=True),
+            call(["ip", "link", "set", "wlan0", "up"], capture_output=True, text=True, check=True),
+            call(["systemctl", "start", "hostapd"], capture_output=True, text=True, check=True),
+            call(["systemctl", "start", "dnsmasq"], capture_output=True, text=True, check=True),
         ]
         for c in expected_calls:
             assert c in sub_mock.call_args_list
@@ -279,11 +279,11 @@ class TestStopApMode:
         result = await mgr.stop_ap_mode()
         assert result is True
         expected_calls = [
-            call(["sudo", "systemctl", "stop", "hostapd"], capture_output=True, text=True, check=False),
-            call(["sudo", "systemctl", "stop", "dnsmasq"], capture_output=True, text=True, check=False),
-            call(["sudo", "ip", "link", "set", "wlan0", "down"], capture_output=True, text=True, check=False),
-            call(["sudo", "ip", "addr", "flush", "dev", "wlan0"], capture_output=True, text=True, check=False),
-            call(["sudo", "systemctl", "start", "NetworkManager"], capture_output=True, text=True, check=False),
+            call(["systemctl", "stop", "hostapd"], capture_output=True, text=True, check=False),
+            call(["systemctl", "stop", "dnsmasq"], capture_output=True, text=True, check=False),
+            call(["ip", "link", "set", "wlan0", "down"], capture_output=True, text=True, check=False),
+            call(["ip", "addr", "flush", "dev", "wlan0"], capture_output=True, text=True, check=False),
+            call(["systemctl", "start", "NetworkManager"], capture_output=True, text=True, check=False),
         ]
         for c in expected_calls:
             assert c in sub_mock.call_args_list

@@ -85,9 +85,7 @@ class TestApplicationInitialization:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-
-        assert result is True
+        asyncio.run(app.initialize_components())
 
         import main as main_module
         main_module.SensorReader.assert_called_once_with(cfg.get("sensors", {}))
@@ -110,7 +108,7 @@ class TestApplicationInitialization:
         assert app.upload_processor is not None
         assert app.health_monitor is not None
 
-    def test_component_init_failure_returns_false(self, mocker, mock_app_components, config_mgr, minimal_config):
+    def test_component_init_failure_continues(self, mocker, mock_app_components, config_mgr, minimal_config):
         cfg = copy.deepcopy(minimal_config)
         cfg["queue"]["enabled"] = False
 
@@ -122,8 +120,8 @@ class TestApplicationInitialization:
         mock_sensors.side_effect = Exception("sensor error")
         mocker.patch("main.SensorReader", mock_sensors)
 
-        result = asyncio.run(app.initialize_components())
-        assert result is False
+        asyncio.run(app.initialize_components())
+        assert app.sensors is None
 
 
 class TestProvisioningMode:
@@ -467,15 +465,16 @@ class TestRunAsync:
         mock_scheduler.start.assert_called_once()
         mock_scheduler.shutdown.assert_called_once()
 
-    def test_returns_1_on_initialization_failure(self, mocker, mock_app_components, config_mgr):
+    def test_continues_on_initialization_failure(self, mocker, mock_app_components, config_mgr):
         from main import GrowMateApp
         app = GrowMateApp()
 
         mocker.patch.object(app, "initialize_components", AsyncMock(return_value=False))
+        app.shutdown_event.set()
 
         result = asyncio.run(app.run_async())
 
-        assert result == 1
+        assert result == 0
 
 
 class TestMainFunction:
@@ -563,8 +562,7 @@ class TestCameraInitFailure:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is True
+        asyncio.run(app.initialize_components())
 
 
 class TestNetworkManagerInitFailure:
@@ -592,8 +590,7 @@ class TestNetworkManagerInitFailure:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is True
+        asyncio.run(app.initialize_components())
         assert app.network is None
 
 
@@ -620,8 +617,7 @@ class TestQueueInitFailure:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is False
+        asyncio.run(app.initialize_components())
 
 
 class TestQueueDisabled:
@@ -644,8 +640,7 @@ class TestQueueDisabled:
         app = GrowMateApp()
         app.config = cfg
 
-        result = asyncio.run(app.initialize_components())
-        assert result is True
+        asyncio.run(app.initialize_components())
         assert app.queue is None
         assert app.upload_processor is None
 

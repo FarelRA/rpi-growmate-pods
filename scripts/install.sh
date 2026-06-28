@@ -609,11 +609,6 @@ set_permissions() {
     chown root:"$TARGET_USER" /etc/hostapd/hostapd.conf 2>/dev/null || true
     chmod 664 /etc/hostapd/hostapd.conf 2>/dev/null || true
 
-    # Passwordless sudo for networking commands used by AP mode
-    echo "$TARGET_USER ALL=(ALL) NOPASSWD: /sbin/ip, /bin/systemctl, /usr/sbin/hostapd, /usr/sbin/dnsmasq" \
-        > /etc/sudoers.d/growmate
-    chmod 440 /etc/sudoers.d/growmate
-
     log_success "Permissions set"
 }
 

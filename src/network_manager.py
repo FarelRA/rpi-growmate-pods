@@ -166,11 +166,11 @@ class NetworkManager:
                 logger.error("Failed to generate dnsmasq configuration")
                 return False
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'stop', 'wpa_supplicant'], check=False)
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'stop', 'NetworkManager'], check=False)
+            await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'wpa_supplicant'], check=False)
+            await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'NetworkManager'], check=False)
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'link', 'set', self.wlan_interface, 'down'])
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'addr', 'flush', 'dev', self.wlan_interface])
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'])
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface])
             cidr = 24
             if self.ap_netmask:
                 try:
@@ -178,11 +178,11 @@ class NetworkManager:
                     cidr = ipaddress.IPv4Network(f'0.0.0.0/{self.ap_netmask}').prefixlen
                 except Exception:
                     cidr = 24
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'addr', 'add', f'{self.ap_ip}/{cidr}', 'dev', self.wlan_interface])
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'link', 'set', self.wlan_interface, 'up'])
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'add', f'{self.ap_ip}/{cidr}', 'dev', self.wlan_interface])
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'up'])
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'start', 'hostapd'])
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'start', 'dnsmasq'])
+            await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'hostapd'])
+            await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'dnsmasq'])
 
             logger.info(f"AP mode started: {self.ap_ssid} @ {self.ap_ip}")
             return True
@@ -195,13 +195,13 @@ class NetworkManager:
         try:
             logger.info("Stopping AP mode")
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'stop', 'hostapd'], check=False)
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'stop', 'dnsmasq'], check=False)
+            await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'hostapd'], check=False)
+            await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'dnsmasq'], check=False)
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'link', 'set', self.wlan_interface, 'down'], check=False)
-            await asyncio.to_thread(self._run_command, ['sudo', 'ip', 'addr', 'flush', 'dev', self.wlan_interface], check=False)
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'], check=False)
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface], check=False)
 
-            await asyncio.to_thread(self._run_command, ['sudo', 'systemctl', 'start', 'NetworkManager'], check=False)
+            await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'NetworkManager'], check=False)
 
             logger.info("AP mode stopped")
             return True
