@@ -100,7 +100,7 @@ class RetryConfig(BaseModel):
 
 class CircuitBreakerConfig(BaseModel):
     failure_threshold: int = Field(5, ge=1, le=20)
-    recovery_timeout: int = Field(60, ge=5, le=600)
+    recovery_timeout: float = Field(60, ge=5, le=600)
     success_threshold: int = Field(2, ge=1, le=10)
 
 

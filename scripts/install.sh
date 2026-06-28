@@ -194,8 +194,9 @@ configure_ap_mode() {
 
     systemctl unmask hostapd 2>/dev/null || true
 
-    cp "$PROJECT_ROOT/config/hostapd.conf.template" "$INSTALL_DIR/"
-    cp "$PROJECT_ROOT/config/dnsmasq.conf.template" "$INSTALL_DIR/"
+    mkdir -p "$INSTALL_DIR/config"
+    cp "$PROJECT_ROOT/config/hostapd.conf.template" "$INSTALL_DIR/config/"
+    cp "$PROJECT_ROOT/config/dnsmasq.conf.template" "$INSTALL_DIR/config/"
 
     log_success "AP mode support configured"
 }

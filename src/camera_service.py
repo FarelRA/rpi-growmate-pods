@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import subprocess
 import time
@@ -56,6 +57,7 @@ class CameraService:
         self.crash_count = 0
         self.last_crash_time: Optional[float] = None
         self.crash_timestamps: List[float] = []
+        self._monitor_task: Optional[asyncio.Task] = None
 
     def start_stream(self) -> bool:
         if not self._enabled:
@@ -63,25 +65,15 @@ class CameraService:
             return False
 
         try:
-            existing_pid = self._find_existing_process()
-            if existing_pid is not None:
-                logger.info(
-                    f"Found existing rpicam-vid (PID {existing_pid}), tracking it"
-                )
-                self.process = None
-                self._pid = existing_pid
-                self.running = True
-                return True
-
             logger.info(f"Starting rpicam-vid stream (tcp://0.0.0.0:{self._port})...")
             self.process = subprocess.Popen(
                 self._cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self._pid = self.process.pid
             self.running = True
             logger.info(f"rpicam-vid started (PID {self.process.pid})")
+            self._try_start_monitoring()
             return True
 
         except FileNotFoundError:
@@ -92,22 +84,6 @@ class CameraService:
             logger.error(f"Failed to start rpicam-vid: {e}")
             self.running = False
             return False
-
-    def _find_existing_process(self) -> Optional[int]:
-        try:
-            result = subprocess.run(
-                ["pgrep", "-x", "rpicam-vid"],
-                capture_output=True, text=True, timeout=5,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                pid = int(result.stdout.strip().split("\n")[0])
-                if self._is_pid_alive(pid):
-                    return pid
-        except FileNotFoundError:
-            pass
-        except (ValueError, subprocess.TimeoutExpired):
-            pass
-        return None
 
     def _is_pid_alive(self, pid: int) -> bool:
         try:
@@ -121,16 +97,20 @@ class CameraService:
             return False
         if self.process is not None:
             return self.process.poll() is None
-        if hasattr(self, "_pid") and self._pid is not None:
-            return self._is_pid_alive(self._pid)
-        return False
+        return self._is_pid_alive(self._get_pid()) if self._get_pid() is not None else False
+
+    def _get_pid(self) -> Optional[int]:
+        try:
+            if self.process is not None and self.process.poll() is None:
+                return self.process.pid
+        except Exception:
+            pass
+        return None
 
     def stop_stream(self):
-        pid = None
-        if self.process is not None:
-            pid = self.process.pid
-        elif hasattr(self, "_pid"):
-            pid = self._pid
+        self._cancel_monitoring()
+
+        pid = self._get_pid()
 
         if pid is None:
             self.running = False
@@ -148,7 +128,6 @@ class CameraService:
 
         self.running = False
         self.process = None
-        self._pid = None
 
     def _wait_for_exit(self, pid: int, timeout: float = 5):
         deadline = time.time() + timeout
@@ -184,6 +163,38 @@ class CameraService:
             )
         return success
 
+    def _try_start_monitoring(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        if self._monitor_task is not None:
+            return
+
+        async def _monitor_loop():
+            while self.running:
+                if self.process is None:
+                    await asyncio.sleep(1)
+                    continue
+                returncode = self.process.poll()
+                if returncode is not None:
+                    if not self.running:
+                        break
+                    logger.warning(
+                        f"rpicam-vid exited (code {returncode}), restarting..."
+                    )
+                    self.stop_stream()
+                    await asyncio.sleep(self._restart_delay)
+                    self.start_stream()
+                await asyncio.sleep(1)
+
+        self._monitor_task = loop.create_task(_monitor_loop())
+
+    def _cancel_monitoring(self):
+        if self._monitor_task is not None:
+            self._monitor_task.cancel()
+            self._monitor_task = None
+
     def get_stream_url(self, tailscale_ip: str) -> str:
         return f"tcp://{tailscale_ip}:{self._port}"
 
@@ -192,17 +203,14 @@ class CameraService:
         cutoff = now - 3600
         recent_crashes = sum(1 for t in self.crash_timestamps if t > cutoff)
         alive = self.is_process_alive()
+        pid = self._get_pid()
         return {
             "running": self.running,
             "process_alive": alive,
             "crash_count": self.crash_count,
             "recent_crashes_1h": recent_crashes,
             "last_crash_time": self.last_crash_time,
-            "pid": (
-                self.process.pid
-                if self.process is not None and self.process.poll() is None
-                else (self._pid if hasattr(self, "_pid") and self._is_pid_alive(self._pid) else None)
-            ),
+            "pid": pid,
         }
 
     def cleanup(self):

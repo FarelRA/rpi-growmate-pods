@@ -532,17 +532,6 @@ class TestEnterOnboardingMode:
         config_mgr.save.assert_called_once()
 
 
-class TestNcfgFunction:
-    def test_ncfg_gets_nested_value(self):
-        from main import ncfg
-        cfg = {"a": {"b": 1, "c": None}}
-        assert ncfg(cfg, "a.b") == 1
-        assert ncfg(cfg, "a.c") is None
-        assert ncfg(cfg, "x.y") is None
-        assert ncfg(cfg, "a.b.c", default=42) == 42
-        assert ncfg("not_dict", "key") is None
-
-
 class TestCameraInitFailure:
     def test_camera_start_stream_returns_false(self, mocker, mock_app_components, config_mgr, minimal_config):
         cfg = copy.deepcopy(minimal_config)

@@ -113,7 +113,7 @@ class TestProcessSensorItem:
         mock_api.upload_sensor_data = AsyncMock(return_value=None)
         result = await processor.process_sensor_item(SENSOR_ITEM)
         assert result is False
-        mock_queue.async_mark_sensor_failed.assert_awaited_once_with(1)
+        mock_queue.async_mark_sensor_failed.assert_awaited_once_with(1, 5)
 
     @pytest.mark.asyncio
     async def test_failure_updates_stats(self, processor, mock_queue, mock_api):
@@ -132,7 +132,7 @@ class TestProcessSensorItem:
     async def test_exception_still_calls_mark_failed(self, processor, mock_queue, mock_api):
         mock_api.upload_sensor_data = AsyncMock(side_effect=ValueError("fail"))
         await processor.process_sensor_item(SENSOR_ITEM)
-        mock_queue.async_mark_sensor_failed.assert_awaited_once_with(1)
+        mock_queue.async_mark_sensor_failed.assert_awaited_once_with(1, 5)
 
 
 class TestProcessQueueOnce:

@@ -1,5 +1,6 @@
 import signal
 import pytest
+from unittest.mock import MagicMock
 from camera_service import CameraService
 
 
@@ -25,18 +26,6 @@ class TestCameraServiceStartStream:
         result = cam.start_stream()
         assert result is False
         assert cam.running is False
-
-    def test_start_stream_finds_existing_process(self, mocker):
-        mock_pid = 12345
-        mocker.patch("camera_service.subprocess.run",
-                     return_value=mocker.MagicMock(returncode=0, stdout=str(mock_pid)))
-        mocker.patch.object(CameraService, "_is_pid_alive", return_value=True)
-        mocker.patch("camera_service.subprocess.Popen")
-
-        cam = CameraService()
-        result = cam.start_stream()
-        assert result is True
-        assert cam.running is True
 
     def test_start_stream_success(self, mocker):
         mock_process = mocker.MagicMock()
@@ -71,6 +60,7 @@ class TestCameraServiceStopStream:
 
         mock_process = mocker.MagicMock()
         mock_process.pid = 11111
+        mock_process.poll.return_value = None
         cam = CameraService()
         cam.process = mock_process
         cam.running = True
@@ -87,6 +77,7 @@ class TestCameraServiceStopStream:
 
         mock_process = mocker.MagicMock()
         mock_process.pid = 22222
+        mock_process.poll.return_value = None
         cam = CameraService()
         cam.process = mock_process
         cam.running = True
@@ -101,23 +92,11 @@ class TestCameraServiceStopStream:
         cam.stop_stream()
         assert cam.running is False
 
-    def test_stop_stream_uses_pid_attr(self, mocker):
-        mock_kill = mocker.patch("camera_service.os.kill")
-        mock_wait = mocker.patch.object(CameraService, "_wait_for_exit")
-        cam = CameraService()
-        cam.process = None
-        cam._pid = 33333
-        cam.running = True
-        cam.stop_stream()
-        mock_kill.assert_called_once_with(33333, signal.SIGTERM)
-        mock_wait.assert_called_once_with(33333, timeout=5)
-        assert cam.running is False
-        assert cam.process is None
-
     def test_stop_stream_generic_exception(self, mocker):
         mocker.patch("camera_service.os.kill", side_effect=PermissionError("denied"))
         mock_process = mocker.MagicMock()
         mock_process.pid = 44444
+        mock_process.poll.return_value = None
         cam = CameraService()
         cam.process = mock_process
         cam.running = True
@@ -148,11 +127,12 @@ class TestCameraServiceIsProcessAlive:
         assert cam.is_process_alive() is False
 
     def test_is_process_alive_via_pid(self, mocker):
+        mock_process = mocker.MagicMock()
+        mock_process.poll.return_value = None
+        mock_process.pid = 55555
         cam = CameraService()
         cam.running = True
-        cam.process = None
-        cam._pid = 55555
-        mocker.patch.object(cam, "_is_pid_alive", return_value=True)
+        cam.process = mock_process
         assert cam.is_process_alive() is True
 
     def test_is_process_alive_fallback_false(self):
@@ -160,29 +140,6 @@ class TestCameraServiceIsProcessAlive:
         cam.running = True
         cam.process = None
         assert cam.is_process_alive() is False
-
-
-class TestCameraServiceFindExistingProcess:
-    def test_find_existing_process_found(self, mocker):
-        mock_run = mocker.patch("camera_service.subprocess.run")
-        mock_run.return_value = mocker.MagicMock(returncode=0, stdout="77777\n")
-        mocker.patch.object(CameraService, "_is_pid_alive", return_value=True)
-        cam = CameraService()
-        pid = cam._find_existing_process()
-        assert pid == 77777
-
-    def test_find_existing_process_not_found(self, mocker):
-        mock_run = mocker.patch("camera_service.subprocess.run")
-        mock_run.return_value = mocker.MagicMock(returncode=1, stdout="")
-        cam = CameraService()
-        pid = cam._find_existing_process()
-        assert pid is None
-
-    def test_find_existing_process_pgrep_not_found(self, mocker):
-        mocker.patch("camera_service.subprocess.run", side_effect=FileNotFoundError)
-        cam = CameraService()
-        pid = cam._find_existing_process()
-        assert pid is None
 
 
 class TestCameraServiceIsPidAlive:
@@ -298,6 +255,62 @@ class TestCameraServiceGetStats:
         assert stats["running"] is False
         assert stats["process_alive"] is False
         assert stats["crash_count"] == 0
+
+
+class TestCameraServiceMonitoring:
+    def test_try_start_monitoring_no_event_loop(self):
+        cam = CameraService()
+        cam._try_start_monitoring()
+        assert cam._monitor_task is None
+
+    def test_try_start_monitoring_already_running(self):
+        cam = CameraService()
+        mock_task = MagicMock()
+        cam._monitor_task = mock_task
+        cam._try_start_monitoring()
+        assert cam._monitor_task is mock_task
+
+    def test_cancel_monitoring_no_task(self):
+        cam = CameraService()
+        cam._cancel_monitoring()
+        assert cam._monitor_task is None
+
+    def test_cancel_monitoring_cancels_task(self):
+        cam = CameraService()
+        mock_task = MagicMock()
+        mock_task.cancel.return_value = None
+        cam._monitor_task = mock_task
+        cam._cancel_monitoring()
+        mock_task.cancel.assert_called_once()
+        assert cam._monitor_task is None
+
+    def test_get_pid_returns_pid(self, mocker):
+        mock_process = mocker.MagicMock()
+        mock_process.pid = 77777
+        mock_process.poll.return_value = None
+        cam = CameraService()
+        cam.process = mock_process
+        assert cam._get_pid() == 77777
+
+    def test_get_pid_returns_none_when_dead(self, mocker):
+        mock_process = mocker.MagicMock()
+        mock_process.pid = 77777
+        mock_process.poll.return_value = 0
+        cam = CameraService()
+        cam.process = mock_process
+        assert cam._get_pid() is None
+
+    def test_get_pid_returns_none_when_no_process(self):
+        cam = CameraService()
+        assert cam._get_pid() is None
+
+    def test_get_pid_returns_none_when_dead_and_exception(self, mocker):
+        mock_process = mocker.MagicMock()
+        mock_process.pid = 77777
+        mock_process.poll.side_effect = AttributeError
+        cam = CameraService()
+        cam.process = mock_process
+        assert cam._get_pid() is None
 
 
 class TestCameraServiceCleanup:

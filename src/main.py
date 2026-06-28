@@ -44,18 +44,6 @@ from logging_config import (
 logger = logging.getLogger("growmate")
 
 
-def ncfg(cfg, key, default=None):
-    curr = cfg
-    for k in key.split('.'):
-        if isinstance(curr, dict):
-            curr = curr.get(k)
-        else:
-            return default
-        if curr is None:
-            return default
-    return curr
-
-
 class GrowMateApp:
 
     def __init__(self):
@@ -170,8 +158,11 @@ class GrowMateApp:
                 upload_processor=self.upload_processor,
                 camera_service=self.camera,
             )
-            if self.config.get('health_monitor', {}).get('history_size'):
-                self.health_monitor.max_history_size = self.config['health_monitor']['history_size']
+            hm_cfg = self.config.get('health_monitor', {})
+            if hm_cfg.get('history_size'):
+                self.health_monitor.max_history_size = hm_cfg['history_size']
+            if hm_cfg.get('camera_crash_threshold'):
+                self.health_monitor._camera_crash_threshold = hm_cfg['camera_crash_threshold']
             logger.info("Health monitor initialized")
 
             return True
@@ -398,7 +389,8 @@ class GrowMateApp:
         try:
             if not self.camera.is_process_alive():
                 logger.warning("rpicam-vid process died, restarting...")
-                if self.camera.restart_stream():
+                restarted = await asyncio.to_thread(self.camera.restart_stream)
+                if restarted:
                     logger.info("rpicam-vid restarted successfully")
                     await self._register_stream_with_retry()
         except Exception as e:
@@ -459,6 +451,8 @@ class GrowMateApp:
             logger.info("Config file changed, reloading...")
             changes = self.config_manager.reload()
             logger.info(f"Config reloaded successfully with {len(changes)} changes")
+            if changes:
+                self.on_config_reload(changes)
         except Exception as e:
             logger.error(f"Failed to reload config: {e}", exc_info=True)
 

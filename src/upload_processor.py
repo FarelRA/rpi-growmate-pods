@@ -29,6 +29,7 @@ class UploadProcessor:
         self.upload_delay = up_cfg.get('delay', UPLOADER_DEFAULTS['delay'])
         self._idle_sleep = up_cfg.get('idle_sleep', UPLOADER_DEFAULTS['idle_sleep'])
         self._batch_sleep = up_cfg.get('batch_sleep', UPLOADER_DEFAULTS['batch_sleep'])
+        self._max_retries = config.get('queue', {}).get('max_retries', 5)
 
         self.stats = {
             'sensor_uploads_success': 0,
@@ -71,7 +72,7 @@ class UploadProcessor:
 
                 return True
             else:
-                await self.queue.async_mark_sensor_failed(item_id)
+                await self.queue.async_mark_sensor_failed(item_id, self._max_retries)
                 self.stats['sensor_uploads_failed'] += 1
                 self.stats['total_processed'] += 1
 
@@ -81,7 +82,7 @@ class UploadProcessor:
         except Exception as e:
             logger.error(f"Error processing sensor item: {e}")
             try:
-                await self.queue.async_mark_sensor_failed(item['id'])
+                await self.queue.async_mark_sensor_failed(item['id'], self._max_retries)
             except Exception:
                 pass
             return False

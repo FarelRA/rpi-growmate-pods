@@ -379,6 +379,10 @@ class SensorReader:
             temp, humidity = self.read_dht22()
             if temp:
                 sensors.append(temp)
+                if humidity:
+                    sensors.append(humidity)
+                else:
+                    sensors.append({"kind": "air", "value": None, "unit": "%", "error": True})
                 self._update_health("temperature", True)
                 self._update_health("air", True)
             else:

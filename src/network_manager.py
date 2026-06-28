@@ -107,6 +107,27 @@ class NetworkManager:
             logger.error(f"Failed to scan networks: {e}")
             return []
 
+    def _generate_dnsmasq_conf(self) -> bool:
+        try:
+            template_path = Path(DNSMASQ_TEMPLATE)
+            if not template_path.exists():
+                template_path = Path(__file__).parent.parent / "config" / "dnsmasq.conf.template"
+
+            if not template_path.exists():
+                logger.error(f"dnsmasq template not found: {template_path}")
+                return False
+
+            template_content = template_path.read_text()
+            conf_path = Path(DNSMASQ_CONF)
+            conf_path.write_text(template_content)
+
+            logger.info("Generated dnsmasq.conf")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to generate dnsmasq.conf: {e}")
+            return False
+
     def _generate_hostapd_conf(self) -> bool:
         try:
             template_path = Path(HOSTAPD_TEMPLATE)
@@ -141,12 +162,23 @@ class NetworkManager:
                 logger.error("Failed to generate hostapd configuration")
                 return False
 
+            if not await asyncio.to_thread(self._generate_dnsmasq_conf):
+                logger.error("Failed to generate dnsmasq configuration")
+                return False
+
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'wpa_supplicant'], check=False)
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'NetworkManager'], check=False)
 
             await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'])
             await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface])
-            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'add', f'{self.ap_ip}/24', 'dev', self.wlan_interface])
+            cidr = 24
+            if self.ap_netmask:
+                try:
+                    import ipaddress
+                    cidr = ipaddress.IPv4Network(f'0.0.0.0/{self.ap_netmask}').prefixlen
+                except Exception:
+                    cidr = 24
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'add', f'{self.ap_ip}/{cidr}', 'dev', self.wlan_interface])
             await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'up'])
 
             await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'hostapd'])

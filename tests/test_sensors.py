@@ -340,7 +340,7 @@ class TestSensorReaderReadAllSensors:
         assert "light" in kinds
         assert "water" in kinds
         assert "temperature" in kinds
-        assert len(result) == 4
+        assert len(result) == 5
 
     def test_read_all_sensors_dht22_disabled(self, mock_sleep):
         reader = SensorReader({"enable_dht22": False})
@@ -388,7 +388,7 @@ class TestSensorReaderAsync:
     async def test_async_read_all_sensors(self, mock_sleep):
         reader = SensorReader()
         result = await reader.async_read_all_sensors()
-        assert len(result) == 4
+        assert len(result) == 5
 
     @pytest.mark.asyncio
     async def test_async_get_current_state(self, mock_sleep):

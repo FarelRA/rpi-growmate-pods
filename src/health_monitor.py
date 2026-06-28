@@ -183,7 +183,8 @@ class HealthMonitor:
         camera_metrics = metrics.get('camera', {})
         if isinstance(camera_metrics, dict):
             recent = camera_metrics.get('recent_crashes_1h', 0)
-            if recent >= 5:
+            threshold = getattr(self, '_camera_crash_threshold', 5)
+            if recent >= threshold:
                 issues.append(
                     f"Camera: {recent} crashes in last hour (threshold: 5)"
                 )

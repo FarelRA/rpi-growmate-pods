@@ -418,7 +418,7 @@ class TestMultipleSensorTypes:
         _run_sensor_cycle(app)
         sensors = _get_uploaded_sensors(app)
         kinds = {s["kind"] for s in sensors}
-        expected = {"soil", "water", "light", "temperature"}
+        expected = {"soil", "water", "light", "temperature", "air"}
         assert kinds == expected, f"Expected {expected}, got {kinds}"
         state = _get_uploaded_state(app)
         state_fields = {"pumpEnabled", "lightEnabled", "fertilizerEnabled",
