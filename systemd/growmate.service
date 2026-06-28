@@ -18,8 +18,8 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=growmate
 
-Environment=DEVICE_API_KEY=<set-during-provisioning>
-Environment=DEVICE_ID=<set-during-provisioning>
+Environment=DEVICE_API_KEY=__DEVICE_API_KEY__
+Environment=DEVICE_ID=__DEVICE_ID__
 
 [Install]
 WantedBy=multi-user.target

@@ -532,7 +532,15 @@ install_service() {
     cp "$PROJECT_ROOT/systemd/growmate.service" "$SERVICE_FILE"
 
     # Patch __USER__ placeholder with the detected target user
-    sed -i "s/__USER__/$TARGET_USER/g" "$SERVICE_FILE"
+    sed -i "s|__USER__|$TARGET_USER|g" "$SERVICE_FILE"
+
+    # Inject DEVICE_API_KEY and DEVICE_ID if set (from .env or environment)
+    if [ -n "${DEVICE_API_KEY:-}" ]; then
+        sed -i "s|__DEVICE_API_KEY__|$DEVICE_API_KEY|g" "$SERVICE_FILE"
+    fi
+    if [ -n "${DEVICE_ID:-}" ]; then
+        sed -i "s|__DEVICE_ID__|$DEVICE_ID|g" "$SERVICE_FILE"
+    fi
 
     systemctl daemon-reload
     log_success "Systemd service installed ($TARGET_USER)"
@@ -544,7 +552,13 @@ enable_service() {
     log_success "Service enabled"
 
     log_info "Starting GrowMate service..."
-    systemctl start growmate || log_warning "Service may need environment vars set; run: sudo systemctl edit growmate"
+    if systemctl start growmate 2>/dev/null; then
+        log_success "GrowMate service started"
+    else
+        if grep -q '__DEVICE_API_KEY__\|__DEVICE_ID__' "$SERVICE_FILE" 2>/dev/null; then
+            log_warning "Service needs env vars; run: sudo systemctl edit growmate"
+        fi
+    fi
 }
 
 set_permissions() {
@@ -578,14 +592,18 @@ display_status() {
 
     log_info "Next Steps:"
     echo ""
-    echo "  1. Set required environment variables:"
-    echo "     sudo systemctl edit growmate"
-    echo ""
-    echo "     Add:"
-    echo "     [Service]"
-    echo "     Environment=DEVICE_API_KEY=<your-api-key>"
-    echo "     Environment=DEVICE_ID=<your-device-id>"
-    echo ""
+
+    if grep -q '__DEVICE_API_KEY__\|__DEVICE_ID__' "$SERVICE_FILE" 2>/dev/null; then
+        echo "  1. Set required environment variables:"
+        echo "     sudo systemctl edit growmate"
+        echo ""
+        echo "     Add:"
+        echo "     [Service]"
+        echo "     Environment=DEVICE_API_KEY=<your-api-key>"
+        echo "     Environment=DEVICE_ID=<your-device-id>"
+        echo ""
+    fi
+
     echo "  2. Ensure Tailscale is connected:"
     echo "     sudo tailscale up"
     echo ""

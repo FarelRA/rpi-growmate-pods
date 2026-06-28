@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""GrowMate V2 Pods — Main Application Loop."""
+
+import os
+import re
 import sys
 import signal
 import logging
@@ -7,6 +11,30 @@ import subprocess
 import threading
 from typing import Optional
 from pathlib import Path
+
+
+# ── Load .env file if present ─────────────────────────────────────────────────
+# Searches project root, script dir, then $HOME.
+# Skips when running under pytest to avoid polluting test environment.
+def _load_dotenv() -> None:
+    if "PYTEST_CURRENT_TEST" in os.environ or "pytest" in sys.modules:
+        return
+    for candidate in (
+        Path(__file__).resolve().parent.parent / ".env",
+        Path(__file__).resolve().parent / ".env",
+        Path.home() / ".env",
+    ):
+        if candidate.is_file():
+            with open(candidate) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, val = line.partition("=")
+                    key, val = key.strip(), val.strip().strip("\"'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+            break
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -47,6 +75,7 @@ logger = logging.getLogger("growmate")
 class GrowMateApp:
 
     def __init__(self):
+        _load_dotenv()
         self.config_manager = ConfigManager()
         self.config = {}
 
