@@ -118,7 +118,7 @@ install_system_deps() {
 
         i2c-tools
 
-        libgpiod2
+        libgpiod3
         python3-libgpiod
 
         rpicam-apps
