@@ -14,7 +14,7 @@
 # - Uses rpicam-vid (rpicam-apps) for live camera stream (no picamera2)
 # - Secrets from env vars (DEVICE_API_KEY, DEVICE_ID), not config.yaml
 # - Interactive config.yaml creation during install
-# - Python virtualenv for isolated dependencies
+# - Python packages via apt (pre-compiled); system pip for the rest
 #
 # Usage:
 #   sudo ./install.sh
@@ -113,8 +113,7 @@ install_system_deps() {
 
     PACKAGES=(
         python3
-        python3-dev
-        python3-venv
+        python3-pip
 
         i2c-tools
 
@@ -126,12 +125,20 @@ install_system_deps() {
         hostapd
         dnsmasq
 
-        build-essential
-
         python3-systemd
-
-        git
         curl
+
+        # Python deps — pre-compiled armhf via apt
+        python3-gpiozero
+        python3-rpi.gpio
+        python3-flask
+        python3-werkzeug
+        python3-yaml
+        python3-psutil
+        python3-watchdog
+        python3-pydantic
+        python3-aiohttp
+        python3-apscheduler
     )
 
     log_info "Installing: ${PACKAGES[*]}"
@@ -216,19 +223,19 @@ copy_files() {
 }
 
 install_python_deps() {
-    log_info "Installing Python dependencies (virtualenv)..."
+    log_info "Installing Python dependencies (system pip)..."
 
-    VENV_DIR="$INSTALL_DIR/venv"
-    python3 -m venv "$VENV_DIR" || error_exit "Failed to create virtualenv"
+    # Packages not available via apt — all have pure-Python wheels
+    pip3 install --upgrade pip -q || log_warning "Failed to upgrade pip"
 
-    # Upgrade pip inside venv
-    "$VENV_DIR/bin/pip" install --upgrade pip -q || log_warning "Failed to upgrade pip in venv"
+    pip3 install \
+        adafruit-circuitpython-dht \
+        adafruit-circuitpython-ads1x15 \
+        adafruit-blinka \
+        python-json-logger \
+        -q || error_exit "Failed to install Python dependencies"
 
-    # Install requirements
-    "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q \
-        || error_exit "Failed to install Python dependencies"
-
-    log_success "Python dependencies installed in virtualenv"
+    log_success "Python dependencies installed"
 }
 
 configure_ap_mode() {

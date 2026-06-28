@@ -15,11 +15,4 @@ fi
 echo "[start.sh] Starting agent..."
 cd "$SCRIPT_DIR/src"
 
-VENV_DIR="$SCRIPT_DIR/venv"
-if [ -f "$VENV_DIR/bin/python3" ]; then
-    PYTHON="$VENV_DIR/bin/python3"
-else
-    PYTHON="python3"
-fi
-
-exec "$PYTHON" main.py
+exec python3 main.py
