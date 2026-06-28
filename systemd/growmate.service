@@ -9,7 +9,7 @@ Type=simple
 User=__USER__
 Group=__USER__
 WorkingDirectory=/home/__USER__/growmate
-ExecStart=/home/__USER__/growmate/start.sh
+ExecStart=/home/__USER__/growmate/scripts/start.sh
 
 Restart=always
 RestartSec=10

@@ -596,7 +596,8 @@ set_permissions() {
 
     chown -R "$TARGET_USER:$TARGET_USER" "$INSTALL_DIR"
     chmod -R 755 "$INSTALL_DIR"
-    chmod +x "$INSTALL_DIR/start.sh"
+    [ -f "$INSTALL_DIR/start.sh" ] && chmod +x "$INSTALL_DIR/start.sh"
+    [ -f "$INSTALL_DIR/scripts/start.sh" ] && chmod +x "$INSTALL_DIR/scripts/start.sh"
 
     log_success "Permissions set"
 }

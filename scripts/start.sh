@@ -3,7 +3,14 @@
 # Orchestrates: Tailscale check -> agent.py
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve project root — works from scripts/ or project root
+SELF="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+SELF_DIR="$(dirname "$SELF")"
+if [ "$(basename "$SELF_DIR")" = "scripts" ]; then
+    PROJECT_ROOT="$(dirname "$SELF_DIR")"
+else
+    PROJECT_ROOT="$SELF_DIR"
+fi
 
 echo "[start.sh] Checking Tailscale..."
 if ! tailscale status 2>/dev/null; then
@@ -13,6 +20,6 @@ if ! tailscale status 2>/dev/null; then
 fi
 
 echo "[start.sh] Starting agent..."
-cd "$SCRIPT_DIR/src"
+cd "$PROJECT_ROOT/src"
 
 exec python3 main.py
