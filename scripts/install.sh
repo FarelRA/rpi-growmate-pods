@@ -599,6 +599,11 @@ set_permissions() {
     [ -f "$INSTALL_DIR/start.sh" ] && chmod +x "$INSTALL_DIR/start.sh"
     [ -f "$INSTALL_DIR/scripts/start.sh" ] && chmod +x "$INSTALL_DIR/scripts/start.sh"
 
+    # Allow grow user to write runtime data dirs
+    mkdir -p /var/lib/growmate /var/log/growmate
+    chown "$TARGET_USER:$TARGET_USER" /var/lib/growmate /var/log/growmate
+    chmod 755 /var/lib/growmate /var/log/growmate
+
     # Allow grow user to write hostapd.conf (runtime AP mode)
     touch /etc/hostapd/hostapd.conf 2>/dev/null || true
     chown root:"$TARGET_USER" /etc/hostapd/hostapd.conf 2>/dev/null || true
