@@ -213,7 +213,7 @@ class TestEnvOverrides:
     def test_get_env_override_device_id(self, monkeypatch):
         monkeypatch.setenv('DEVICE_ID', 'my-device')
         val = ConfigManager._get_env_override('device.id')
-        assert val == 'my-device'
+        assert val == 'growmate-my-device'
 
     def test_get_env_override_api_key(self, monkeypatch):
         monkeypatch.setenv('DEVICE_API_KEY', 'sk-123')
@@ -278,7 +278,7 @@ class TestEnvOverrides:
         cfg = {'device': {'id': 'default'}}
         mgr = ConfigManager()
         mgr._apply_env_overrides(cfg)
-        assert cfg['device']['id'] == 'env-device'
+        assert cfg['device']['id'] == 'growmate-env-device'
 
     def test_bool_override_true_values(self, monkeypatch):
         monkeypatch.setenv('GROWMATE_FEATURES_OFFLINE_QUEUE', '1')

@@ -239,7 +239,7 @@ sudo journalctl -u growmate | grep -i error
 
 ### Can't Connect to AP Mode
 
-**Symptoms:** GrowMate-XXXXXX network not visible
+**Symptoms:** growmate-XXXXXX network not visible
 
 **Solutions:**
 

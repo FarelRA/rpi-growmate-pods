@@ -99,14 +99,14 @@ sudo systemctl restart growmate
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DEVICE_API_KEY` | Yes | API key for x-api-key auth |
-| `DEVICE_ID` | Yes | Device identifier (alphanumeric, hyphens, underscores) |
+| `DEVICE_ID` | Yes | Device identifier (short lowercase, auto-prepended with `growmate-`) |
 | `GROWMATE_<KEY>` | No | Override any YAML key (e.g., `GROWMATE_INTERVALS_SENSOR_READING=30`) |
 
 ### YAML Config (`/etc/growmate/config.yaml`)
 
 ```yaml
 device:
-  id: "growmate-001"          # overridden by DEVICE_ID env var
+  id: "growmate-iaft01"       # overridden by DEVICE_ID env var
 api:
   sensor_url: "https://growmate.bond/api/v2/sensors"
 intervals:
@@ -121,7 +121,7 @@ Changes to intervals and retry settings apply without restart (hot-reload via co
 
 ```json
 {
-  "deviceId": "growmate-001",
+  "deviceId": "growmate-iaft01",
   "firmwareVersion": "2.0.0",
   "currentState": {
     "pumpEnabled": false,
@@ -159,7 +159,7 @@ Changes to intervals and retry settings apply without restart (hot-reload via co
 
 ```json
 {
-  "deviceId": "growmate-001",
+  "deviceId": "growmate-iaft01",
   "streamUrl": "tcp://100.x.x.x:8554"
 }
 ```
@@ -168,7 +168,7 @@ Changes to intervals and retry settings apply without restart (hot-reload via co
 
 On first boot (unprovisioned), the device creates a WiFi AP:
 
-1. Connect to `GrowMate-XXXXXX` WiFi (password: `growmate`)
+1. Connect to `growmate-XXXXXX` WiFi (password: `growmate`)
 2. Open `http://192.168.4.1`
 3. Enter your WiFi credentials
 4. Set device ID and API key

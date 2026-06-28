@@ -745,7 +745,7 @@ def run(self):
 
 4. **AP Mode Management**
    - Keep existing AP mode logic
-   - SSID: `GrowMate-XXXXXX`
+   - SSID: `growmate-XXXXXX`
    - Password: `growmate`
    - IP: `192.168.4.1`
    - Automatic switch to client mode after config

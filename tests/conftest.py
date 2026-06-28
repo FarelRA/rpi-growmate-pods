@@ -125,7 +125,7 @@ if str(SRC_DIR) not in sys.path:
 @pytest.fixture
 def default_config(monkeypatch):
     """Return a copy of the full default config dict (V2 schema)."""
-    monkeypatch.setenv("DEVICE_ID", "growmate-b827eb123456")
+    monkeypatch.setenv("DEVICE_ID", "test-device")
     from config_manager import ConfigManager
     cfg = ConfigManager.get_default_config()
     return cfg
@@ -150,7 +150,7 @@ def minimal_config():
             "wifi": {"interface": "wlan0", "connect_timeout": 12, "connect_retries": 4},
         },
         "ap_mode": {
-            "ssid": "GrowMate-TEST",
+            "ssid": "growmate-test",
             "password": "growmate",
             "channel": 1,
             "ip_address": "192.168.4.1",

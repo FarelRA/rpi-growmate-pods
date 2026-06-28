@@ -174,7 +174,7 @@ The V2 handoff specifies behavior. The local-first foundation is how we implemen
             │  AP MODE (First-time / recovery) │                               │
             │  ┌────────────────────────┐      │                               │
             │  │  hostapd + dnsmasq     │      │                               │
-            │  │  GrowMate-XXXX AP      │      │                               │
+            │  │  growmate-XXXX AP      │      │                               │
             │  └───────────┬────────────┘      │                               │
             │              │                    │                               │
             │  ┌───────────▼────────────┐      │                               │

@@ -47,22 +47,19 @@ def map_range(value: float, in_min: float, in_max: float,
 
 
 def get_device_id() -> str:
-    try:
-        with open('/sys/class/net/wlan0/address', 'r') as f:
-            mac = f.read().strip().replace(':', '')
-            return f"growmate-{mac}"
-    except FileNotFoundError:
+    for iface in ('wlan0', 'eth0'):
         try:
-            with open('/sys/class/net/eth0/address', 'r') as f:
-                mac = f.read().strip().replace(':', '')
-                return f"growmate-{mac}"
+            with open(f'/sys/class/net/{iface}/address') as f:
+                return f.read().strip().replace(':', '').lower()
         except FileNotFoundError:
-            import socket
-            return f"growmate-{socket.gethostname()}"
+            continue
+    import socket
+    return socket.gethostname().lower()
 
 
 def get_env_device_id() -> str:
-    return os.environ.get("DEVICE_ID") or get_device_id()
+    raw = os.environ.get("DEVICE_ID") or get_device_id()
+    return f"growmate-{raw}"
 
 
 def get_env_api_key() -> str:
@@ -70,9 +67,7 @@ def get_env_api_key() -> str:
 
 
 def get_ap_ssid() -> str:
-    device_id = get_device_id()
-    suffix = device_id.split('-')[-1][-6:].upper()
-    return f"GrowMate-{suffix}"
+    return get_env_device_id()
 
 
 # Application constants

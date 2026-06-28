@@ -24,7 +24,7 @@ device:
   # id — Unique device identifier.
   # Regex: ^[a-zA-Z0-9_-]+$, max 128 chars.
   # Auto-generated from MAC address if omitted (growmate-<mac>).
-  # Override via DEVICE_ID env var.
+  # Override via DEVICE_ID env var (short lowercase ID, no prefix).
   id: "growmate-b827eb123456"
 
 # ---------------------------------------------------------------------------
@@ -80,8 +80,8 @@ network:
 # ---------------------------------------------------------------------------
 ap_mode:
   # ssid — AP SSID broadcast in AP mode (max 32 chars).
-  # Auto-generated as "GrowMate-<MAC>" if omitted or empty.
-  ssid: "GrowMate-A1B2C3"
+  # Auto-generated as "growmate-<mac>" if omitted or empty.
+  ssid: "growmate-a1b2c3"
 
   # password — AP password (min 8 chars, max 63 chars for WPA2-PSK).
   password: "growmate"

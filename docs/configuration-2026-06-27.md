@@ -61,7 +61,7 @@ version: 9
 # device — Identity
 # ===========================================================================
 device:
-  id: "growmate-b827eb123456"   # Auto MAC-derived; override via DEVICE_ID env
+  id: "growmate-b827eb123456"   # Auto MAC-derived; override via DEVICE_ID env (short raw ID)
 
 # ===========================================================================
 # api — Backend endpoints, timeouts
@@ -88,7 +88,7 @@ network:
 # ap_mode — Access Point (first-time setup / recovery)
 # ===========================================================================
 ap_mode:
-  ssid: "GrowMate-A1B2C3"        # AP SSID (max 32 chars; auto MAC-derived if empty)
+  ssid: "growmate-a1b2c3"        # AP SSID (max 32 chars; auto MAC-derived if empty)
   password: "growmate"           # AP WiFi password (min 8 chars)
   channel: 1                     # WiFi channel (1–11 for 2.4 GHz; 0 = auto)
   ip_address: "192.168.4.1"     # AP gateway

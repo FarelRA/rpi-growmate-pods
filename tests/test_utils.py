@@ -61,7 +61,7 @@ class TestGetDeviceId:
         mocker.patch("builtins.open", mocker.mock_open(read_data="b8:27:eb:12:34:56\n"))
         mocker.patch("pathlib.Path.exists", return_value=True)
         result = get_device_id()
-        assert result == "growmate-b827eb123456"
+        assert result == "b827eb123456"
 
     def test_from_eth0(self, mocker):
         def side_effect(path, *args, **kwargs):
@@ -70,24 +70,24 @@ class TestGetDeviceId:
             return mocker.mock_open(read_data="aa:bb:cc:dd:ee:ff\n")(path)
         mocker.patch("builtins.open", side_effect=side_effect)
         result = get_device_id()
-        assert result == "growmate-aabbccddeeff"
+        assert result == "aabbccddeeff"
 
     def test_fallback_to_hostname(self, mocker):
         mocker.patch("builtins.open", side_effect=FileNotFoundError)
         mocker.patch("socket.gethostname", return_value="raspberrypi")
         result = get_device_id()
-        assert result == "growmate-raspberrypi"
+        assert result == "raspberrypi"
 
 
 class TestGetEnvDeviceId:
     def test_from_env_var(self):
         os.environ["DEVICE_ID"] = "custom-id"
-        assert get_env_device_id() == "custom-id"
+        assert get_env_device_id() == "growmate-custom-id"
         del os.environ["DEVICE_ID"]
 
     def test_fallback(self, mocker):
-        mocker.patch("utils.get_device_id", return_value="growmate-test")
-        assert get_env_device_id() == "growmate-test"
+        mocker.patch("utils.get_device_id", return_value="b827eb123456")
+        assert get_env_device_id() == "growmate-b827eb123456"
 
 
 class TestGetEnvApiKey:
@@ -102,11 +102,11 @@ class TestGetEnvApiKey:
 
 class TestGetApSsid:
     def test_generates_valid_ssid(self, mocker):
-        mocker.patch("utils.get_device_id", return_value="growmate-b827eb123456")
+        mocker.patch("utils.get_device_id", return_value="b827eb123456")
         ssid = get_ap_ssid()
-        assert ssid.startswith("GrowMate-")
+        assert ssid.startswith("growmate-")
         assert len(ssid) > 8
-        assert ssid == "GrowMate-123456"
+        assert ssid == "growmate-b827eb123456"
 
 
 class TestConstants:

@@ -284,7 +284,7 @@ create_config() {
 
     # Detect device ID from MAC (fallback if not set via .env)
     if [ -z "${DEVICE_ID:-}" ]; then
-        DEVICE_ID="growmate-$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' || echo 'unknown')"
+        DEVICE_ID="$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' | tr 'A-F' 'a-f' || echo 'unknown')"
     fi
 
     # Defaults from .env (or hardcoded if unset)
@@ -394,7 +394,7 @@ create_config() {
 version: 9
 
 device:
-  id: "${DEVICE_ID}"
+  id: "growmate-${DEVICE_ID}"
 
 api:
   sensor_url: "${SENSOR_URL}"
@@ -412,7 +412,7 @@ network:
     connect_retries: 4
 
 ap_mode:
-  ssid: "GrowMate-A1B2C3"
+  ssid: "growmate-${DEVICE_ID}"
   password: "${AP_PASS}"
   channel: 1
   ip_address: "192.168.4.1"

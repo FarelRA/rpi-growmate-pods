@@ -432,7 +432,7 @@ Requirements:
    ```
 8. **Generate config.yaml** — install.sh prompts for API key, device ID, WiFi credentials, log level
 9. **Install systemd service**: Copy `systemd/growmate.service` to `/etc/systemd/system/`, then `sudo systemctl enable growmate`
-10. **AP mode** activates on first boot if no WiFi credentials are stored; user connects to `GrowMate-XXXX` AP, opens http://192.168.4.1, enters WiFi credentials
+10. **AP mode** activates on first boot if no WiFi credentials are stored; user connects to `growmate-XXXX` AP, opens http://192.168.4.1, enters WiFi credentials
 11. **Verify**:
     ```bash
     sudo journalctl -u growmate -f

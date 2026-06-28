@@ -178,7 +178,7 @@ class TestValidateConfig:
     def test_valid_full_config(self, default_config):
         validated = validate_config(default_config)
         assert validated.version == 9
-        assert validated.device.id == "growmate-b827eb123456"
+        assert validated.device.id == "growmate-test-device"
 
     def test_extra_keys_forbidden(self, minimal_config):
         minimal_config["extra_field"] = "not allowed"

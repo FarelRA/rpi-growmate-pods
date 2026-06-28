@@ -45,8 +45,10 @@ class ConfigManager:
         
     @staticmethod
     def _get_env_override(key: str) -> Optional[str]:
+        if key == "device.id" and "DEVICE_ID" in os.environ:
+            from utils import get_env_device_id
+            return get_env_device_id()
         env_map = {
-            "device.id": "DEVICE_ID",
             "api.api_key": "DEVICE_API_KEY",
         }
         if key in env_map:
@@ -258,7 +260,7 @@ class ConfigManager:
                 },
             },
             'ap_mode': {
-                'ssid': 'GrowMate-A1B2C3',
+                'ssid': 'growmate-a1b2c3',
                 'password': 'growmate',
                 'channel': 1,
                 'ip_address': '192.168.4.1',

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call
 
 CONFIG_WITH_AP = {
     "ap_mode": {
-        "ssid": "GrowMate-Explicit",
+        "ssid": "growmate-explicit",
         "password": "testpass",
         "channel": 6,
         "interface": "wlan0",
@@ -80,7 +80,7 @@ def empty_manager(mock_subproc):
 
 class TestInit:
     def test_explicit_ssid_password_channel(self, manager):
-        assert manager.ap_ssid == "GrowMate-Explicit"
+        assert manager.ap_ssid == "growmate-explicit"
         assert manager.ap_password == "testpass"
         assert manager.ap_channel == 6
 
@@ -121,20 +121,20 @@ class TestInit:
 
 class TestGetApSsid:
     def test_explicit_via_config(self, manager):
-        assert manager._get_ap_ssid() == "GrowMate-Explicit"
+        assert manager._get_ap_ssid() == "growmate-explicit"
 
     def test_fallback_via_utils(self, mock_subproc, mocker):
-        mocker.patch("utils.get_ap_ssid", return_value="GrowMate-ABCDEF")
+        mocker.patch("utils.get_ap_ssid", return_value="growmate-abcdef")
         from network_manager import NetworkManager
         mgr = NetworkManager({"ap_mode": {"ssid": ""}, "network": {}})
         result = mgr._get_ap_ssid()
-        assert result == "GrowMate-ABCDEF"
+        assert result == "growmate-abcdef"
 
     def test_empty_ssid_in_config(self, mock_subproc, mocker):
-        mocker.patch("utils.get_ap_ssid", return_value="GrowMate-FALLBACK")
+        mocker.patch("utils.get_ap_ssid", return_value="growmate-fallback")
         from network_manager import NetworkManager
         mgr = NetworkManager({"ap_mode": {"ssid": ""}, "network": {}})
-        assert mgr._get_ap_ssid() == "GrowMate-FALLBACK"
+        assert mgr._get_ap_ssid() == "growmate-fallback"
 
 
 class TestRunCommand:
@@ -222,7 +222,7 @@ class TestGenerateHostapdConf:
         write_mock = mocker.patch("pathlib.Path.write_text")
         mocker.patch("pathlib.Path.exists", return_value=True)
         assert manager._generate_hostapd_conf() is True
-        write_mock.assert_called_once_with("GrowMate-Explicit|testpass|6")
+        write_mock.assert_called_once_with("growmate-explicit|testpass|6")
 
 
 class TestStartApMode:

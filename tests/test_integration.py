@@ -36,7 +36,7 @@ class TestConfigValidatorManager:
             yaml.dump(minimal_config, f)
         mgr = ConfigManager(config_path=cfg_path)
         mgr.load()
-        assert mgr.config["device"]["id"] == "env-overridden-device"
+        assert mgr.config["device"]["id"] == "growmate-env-overridden-device"
 
     def test_dot_notation_get_set_persistence(self, minimal_config):
         from config_manager import ConfigManager
@@ -583,7 +583,7 @@ class TestNetworkManagerHostapd:
         write_mock = mocker.patch("pathlib.Path.write_text")
         config = {
             "ap_mode": {
-                "ssid": "GrowMate-Custom",
+                "ssid": "growmate-custom",
                 "password": "secure123",
                 "channel": 11,
                 "interface": "wlan0",
@@ -592,14 +592,14 @@ class TestNetworkManagerHostapd:
         }
         mgr = NetworkManager(config)
         assert mgr._generate_hostapd_conf() is True
-        write_mock.assert_called_once_with("GrowMate-Custom|secure123|11")
+        write_mock.assert_called_once_with("growmate-custom|secure123|11")
 
     def test_generate_hostapd_config_auto_ssid_from_mac(self, mocker):
         from network_manager import NetworkManager
         mocker.patch("pathlib.Path.exists", return_value=True)
         mocker.patch("pathlib.Path.read_text", return_value="{SSID}|{PASSWORD}|{CHANNEL}")
         write_mock = mocker.patch("pathlib.Path.write_text")
-        mocker.patch("utils.get_ap_ssid", return_value="GrowMate-ABCDEF")
+        mocker.patch("utils.get_ap_ssid", return_value="growmate-abcdef")
         config = {
             "ap_mode": {
                 "ssid": "",
@@ -610,7 +610,7 @@ class TestNetworkManagerHostapd:
         }
         mgr = NetworkManager(config)
         assert mgr._generate_hostapd_conf() is True
-        write_mock.assert_called_once_with("GrowMate-ABCDEF|growmate|1")
+        write_mock.assert_called_once_with("growmate-abcdef|growmate|1")
 
     def test_generate_hostapd_config_template_not_found(self, mocker):
         from network_manager import NetworkManager
@@ -631,11 +631,11 @@ class TestNetworkManagerHostapd:
             "ap_mode": {},
             "network": {"wifi": {}},
         }
-        mocker.patch("utils.get_ap_ssid", return_value="GrowMate-DEFAULT")
+        mocker.patch("utils.get_ap_ssid", return_value="growmate-default")
         mgr = NetworkManager(config)
         assert mgr._generate_hostapd_conf() is True
         from network_manager import AP_PASSWORD
-        write_mock.assert_called_once_with("GrowMate-DEFAULT|growmate|1")
+        write_mock.assert_called_once_with("growmate-default|growmate|1")
 
     def test_generate_hostapd_config_templates_from_config_dir(self, mocker):
         from network_manager import NetworkManager
@@ -645,12 +645,12 @@ class TestNetworkManagerHostapd:
         read_mock = mocker.patch("pathlib.Path.read_text", return_value="ssid={SSID}\nchannel={CHANNEL}")
         write_mock = mocker.patch("pathlib.Path.write_text")
         config = {
-            "ap_mode": {"ssid": "GrowMate-ABCDEF", "password": "test", "channel": 6},
+            "ap_mode": {"ssid": "growmate-abcdef", "password": "test", "channel": 6},
             "network": {"wifi": {}},
         }
         mgr = NetworkManager(config)
         assert mgr._generate_hostapd_conf() is True
-        write_mock.assert_called_once_with("ssid=GrowMate-ABCDEF\nchannel=6")
+        write_mock.assert_called_once_with("ssid=growmate-abcdef\nchannel=6")
 
 
 class TestCrossComponentEdgeCases:
