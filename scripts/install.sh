@@ -228,7 +228,7 @@ install_python_deps() {
     # Packages not available via apt — all have pure-Python wheels
     pip3 install --upgrade pip -q || log_warning "Failed to upgrade pip"
 
-    pip3 install \
+    pip3 install --break-system-packages \
         adafruit-circuitpython-dht \
         adafruit-circuitpython-ads1x15 \
         adafruit-blinka \
@@ -250,8 +250,10 @@ configure_ap_mode() {
     systemctl unmask hostapd 2>/dev/null || true
 
     mkdir -p "$INSTALL_DIR/config"
-    cp "$PROJECT_ROOT/config/hostapd.conf.template" "$INSTALL_DIR/config/"
-    cp "$PROJECT_ROOT/config/dnsmasq.conf.template" "$INSTALL_DIR/config/"
+    [ "$PROJECT_ROOT/config/hostapd.conf.template" != "$INSTALL_DIR/config/hostapd.conf.template" ] && \
+        cp "$PROJECT_ROOT/config/hostapd.conf.template" "$INSTALL_DIR/config/"
+    [ "$PROJECT_ROOT/config/dnsmasq.conf.template" != "$INSTALL_DIR/config/dnsmasq.conf.template" ] && \
+        cp "$PROJECT_ROOT/config/dnsmasq.conf.template" "$INSTALL_DIR/config/"
 
     log_success "AP mode support configured"
 }
