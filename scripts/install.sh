@@ -197,6 +197,11 @@ enable_i2c() {
 create_install_dir() {
     log_info "Creating installation directory: $INSTALL_DIR"
 
+    if [ "$PROJECT_ROOT" = "$INSTALL_DIR" ]; then
+        log_info "Running from install target — files already in place"
+        return
+    fi
+
     if [ -d "$INSTALL_DIR" ]; then
         BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
         log_warning "Existing installation found. Backing up to: $BACKUP_DIR"
@@ -208,6 +213,11 @@ create_install_dir() {
 }
 
 copy_files() {
+    if [ "$PROJECT_ROOT" = "$INSTALL_DIR" ]; then
+        log_info "Files already at install target — skipping copy"
+        return
+    fi
+
     log_info "Copying project files to $INSTALL_DIR..."
 
     cp -r "$PROJECT_ROOT/src" "$INSTALL_DIR/"
