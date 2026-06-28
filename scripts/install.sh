@@ -20,6 +20,21 @@
 #
 set -e
 
+# ── Load .env if present ─────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+load_env() {
+    local env_file
+    for candidate in "$SCRIPT_DIR/../.env" "$SCRIPT_DIR/.env" "$HOME/.env"; do
+        if [ -f "$candidate" ]; then
+            echo "  Loading environment from $candidate"
+            # shellcheck source=/dev/null
+            . "$candidate"
+            return
+        fi
+    done
+}
+load_env
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -119,8 +134,13 @@ install_tailscale() {
     curl -fsSL https://tailscale.com/install.sh | sh || error_exit "Failed to install Tailscale"
     log_success "Tailscale installed"
 
-    log_info "Bring up Tailscale (you'll need to authenticate)..."
-    tailscale up || log_warning "Tailscale up failed. Run 'sudo tailscale up' manually after install."
+    if [ -n "$TAILSCALE_AUTH_KEY" ]; then
+        log_info "Bring up Tailscale with auth key..."
+        tailscale up --auth-key "$TAILSCALE_AUTH_KEY" || log_warning "Tailscale up failed. Run 'sudo tailscale up' manually after install."
+    else
+        log_info "Bring up Tailscale (you'll need to authenticate)..."
+        tailscale up || log_warning "Tailscale up failed. Run 'sudo tailscale up' manually after install."
+    fi
 }
 
 enable_i2c() {
@@ -206,8 +226,10 @@ create_config() {
 
     mkdir -p "$CONFIG_DIR"
 
-    # Detect device ID from MAC
-    DEVICE_ID="growmate-$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' || echo 'unknown')"
+    # Detect device ID from MAC (fallback if not set via .env)
+    if [ -z "${DEVICE_ID:-}" ]; then
+        DEVICE_ID="growmate-$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' || echo 'unknown')"
+    fi
 
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
@@ -216,71 +238,93 @@ create_config() {
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 
+    # Defaults from .env (or hardcoded if unset)
+    SENSOR_URL="${SENSOR_URL:-https://growmate.bond/api/v2/sensors}"
+    STREAM_URL="${STREAM_URL:-https://growmate.bond/api/v2/stream/register}"
+    AP_PASS="${AP_PASS:-growmate}"
+    SENSOR_INTERVAL="${SENSOR_INTERVAL:-60}"
+    DHT22="${DHT22:-true}"
+    DHT22_PIN="${DHT22_PIN:-4}"
+    ADC_ADDR="${ADC_ADDR:-0x48}"
+    ADC_GAIN="${ADC_GAIN:-1}"
+    PUMP_PIN="${PUMP_PIN:-10}"
+    FERT_PIN="${FERT_PIN:-17}"
+    PEST_PIN="${PEST_PIN:-27}"
+    TANK_PIN="${TANK_PIN:-20}"
+    DRAWER_PIN="${DRAWER_PIN:-21}"
+    CAM_ENABLED="${CAM_ENABLED:-true}"
+    LOG_LEVEL="${LOG_LEVEL:-INFO}"
+
     # Device
     read -r -p "  Device ID [$DEVICE_ID]: " input_id
     DEVICE_ID="${input_id:-$DEVICE_ID}"
 
     # API
-    read -r -p "  Sensor API URL [https://growmate.bond/api/v2/sensors]: " input_sensor_url
-    SENSOR_URL="${input_sensor_url:-https://growmate.bond/api/v2/sensors}"
+    read -r -p "  Sensor API URL [$SENSOR_URL]: " input_sensor_url
+    SENSOR_URL="${input_sensor_url:-$SENSOR_URL}"
 
-    read -r -p "  Stream Register URL [https://growmate.bond/api/v2/stream/register]: " input_stream_url
-    STREAM_URL="${input_stream_url:-https://growmate.bond/api/v2/stream/register}"
+    read -r -p "  Stream Register URL [$STREAM_URL]: " input_stream_url
+    STREAM_URL="${input_stream_url:-$STREAM_URL}"
 
     # Onboarding
-    read -r -p "  AP mode password [growmate]: " input_ap_pass
-    AP_PASS="${input_ap_pass:-growmate}"
+    read -r -p "  AP mode password [$AP_PASS]: " input_ap_pass
+    AP_PASS="${input_ap_pass:-$AP_PASS}"
 
     # Sensor interval
-    read -r -p "  Sensor reading interval in seconds [60]: " input_interval
-    SENSOR_INTERVAL="${input_interval:-60}"
+    read -r -p "  Sensor reading interval in seconds [$SENSOR_INTERVAL]: " input_interval
+    SENSOR_INTERVAL="${input_interval:-$SENSOR_INTERVAL}"
 
     # DHT22
-    read -r -p "  Enable DHT22 sensor? (y/n) [y]: " input_dht
-    if [[ "${input_dht:-y}" =~ ^[Yy] ]]; then
+    dht_default="y"
+    [ "$DHT22" = "false" ] && dht_default="n"
+    read -r -p "  Enable DHT22 sensor? (y/n) [$dht_default]: " input_dht
+    input_dht="${input_dht:-$dht_default}"
+    if [[ "$input_dht" =~ ^[Yy] ]]; then
         DHT22="true"
-        read -r -p "  DHT22 GPIO pin [4]: " input_dht_pin
-        DHT22_PIN="${input_dht_pin:-4}"
+        read -r -p "  DHT22 GPIO pin [$DHT22_PIN]: " input_dht_pin
+        DHT22_PIN="${input_dht_pin:-$DHT22_PIN}"
     else
         DHT22="false"
-        DHT22_PIN="4"
     fi
 
     # ADC
-    read -r -p "  ADC I2C address (hex, e.g. 0x48) [0x48]: " input_adc_addr
-    ADC_ADDR="${input_adc_addr:-0x48}"
+    read -r -p "  ADC I2C address (hex, e.g. 0x48) [$ADC_ADDR]: " input_adc_addr
+    ADC_ADDR="${input_adc_addr:-$ADC_ADDR}"
 
-    read -r -p "  ADC gain [1]: " input_gain
-    ADC_GAIN="${input_gain:-1}"
+    read -r -p "  ADC gain [$ADC_GAIN]: " input_gain
+    ADC_GAIN="${input_gain:-$ADC_GAIN}"
 
     # Relay pins
-    read -r -p "  Pump relay GPIO [10]: " input_pump
-    PUMP_PIN="${input_pump:-10}"
+    read -r -p "  Pump relay GPIO [$PUMP_PIN]: " input_pump
+    PUMP_PIN="${input_pump:-$PUMP_PIN}"
 
-    read -r -p "  Fertilizer relay GPIO [17]: " input_fert
-    FERT_PIN="${input_fert:-17}"
+    read -r -p "  Fertilizer relay GPIO [$FERT_PIN]: " input_fert
+    FERT_PIN="${input_fert:-$FERT_PIN}"
 
-    read -r -p "  Pesticide relay GPIO [27]: " input_pest
-    PEST_PIN="${input_pest:-27}"
+    read -r -p "  Pesticide relay GPIO [$PEST_PIN]: " input_pest
+    PEST_PIN="${input_pest:-$PEST_PIN}"
 
     # Limit switches
-    read -r -p "  Tank limit switch GPIO [20]: " input_tank
-    TANK_PIN="${input_tank:-20}"
+    read -r -p "  Tank limit switch GPIO [$TANK_PIN]: " input_tank
+    TANK_PIN="${input_tank:-$TANK_PIN}"
 
-    read -r -p "  Drawer limit switch GPIO [21]: " input_drawer
-    DRAWER_PIN="${input_drawer:-21}"
+    read -r -p "  Drawer limit switch GPIO [$DRAWER_PIN]: " input_drawer
+    DRAWER_PIN="${input_drawer:-$DRAWER_PIN}"
 
     # Camera
-    read -r -p "  Enable rpicam-vid camera? (y/n) [y]: " input_cam
-    if [[ "${input_cam:-y}" =~ ^[Yy] ]]; then
+    cam_default="y"
+    [ "$CAM_ENABLED" = "false" ] && cam_default="n"
+    read -r -p "  Enable rpicam-vid camera? (y/n) [$cam_default]: " input_cam
+    input_cam="${input_cam:-$cam_default}"
+    if [[ "$input_cam" =~ ^[Yy] ]]; then
         CAM_ENABLED="true"
     else
         CAM_ENABLED="false"
     fi
 
     # Logging
-    read -r -p "  Log level (DEBUG/INFO/WARNING/ERROR) [INFO]: " input_log
-    LOG_LEVEL="${input_log:-INFO}"
+    read -r -p "  Log level (DEBUG/INFO/WARNING/ERROR) [$LOG_LEVEL]: " input_log
+    LOG_LEVEL="${input_log:-$LOG_LEVEL}"
 
     # Provisioned (fresh install = false)
     PROVISIONED="false"

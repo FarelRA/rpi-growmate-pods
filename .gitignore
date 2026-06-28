@@ -47,6 +47,10 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Environment files (secrets)
+.env
+!.env.example
+
 # Configuration files with credentials
 # Keep the example, but ignore actual config
 /config/config.yaml
