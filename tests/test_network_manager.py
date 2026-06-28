@@ -281,8 +281,6 @@ class TestStopApMode:
         expected_calls = [
             call(["systemctl", "stop", "hostapd"], capture_output=True, text=True, check=False),
             call(["systemctl", "stop", "dnsmasq"], capture_output=True, text=True, check=False),
-            call(["ip", "link", "set", "wlan0", "down"], capture_output=True, text=True, check=False),
-            call(["ip", "addr", "flush", "dev", "wlan0"], capture_output=True, text=True, check=False),
             call(["systemctl", "start", "NetworkManager"], capture_output=True, text=True, check=False),
         ]
         for c in expected_calls:
@@ -321,7 +319,7 @@ class TestConnectToWifi:
         mocker.patch("pathlib.Path.write_text")
         mocker.patch("asyncio.sleep")
 
-        results = [make_result() for _ in range(5)]
+        results = [make_result() for _ in range(3)]
         results.append(make_result("", 1))
         results.append(make_result("", 0))
         sub_mock = mocker.patch("subprocess.run", side_effect=results)
@@ -342,7 +340,7 @@ class TestConnectToWifi:
         mocker.patch("pathlib.Path.write_text")
         mocker.patch("asyncio.sleep")
 
-        results = [make_result() for _ in range(5)]
+        results = [make_result() for _ in range(3)]
         results.extend([make_result("", 1) for _ in range(5)])
         sub_mock = mocker.patch("subprocess.run", side_effect=results)
         from network_manager import NetworkManager

@@ -198,9 +198,6 @@ class NetworkManager:
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'hostapd'], check=False)
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'dnsmasq'], check=False)
 
-            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'], check=False)
-            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface], check=False)
-
             await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'NetworkManager'], check=False)
 
             logger.info("AP mode stopped")
