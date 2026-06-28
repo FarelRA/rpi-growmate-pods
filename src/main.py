@@ -108,6 +108,7 @@ class GrowMateApp:
             loop.call_soon_threadsafe(self.shutdown_event.set)
         except RuntimeError:
             pass
+        self._onboarding_complete.set()
 
     def load_configuration(self) -> bool:
         try:
