@@ -17,9 +17,18 @@
 # - Python packages via apt (pre-compiled); system pip for the rest
 #
 # Usage:
-#   sudo ./install.sh
+#   sudo ./install.sh             (interactive prompts)
+#   sudo ./install.sh -y          (accept all defaults)
 #
 set -e
+
+AUTO_YES=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes) AUTO_YES=true; shift ;;
+        *) shift ;;
+    esac
+done
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -236,7 +245,7 @@ install_python_deps() {
     log_info "Installing Python dependencies (system pip)..."
 
     # Packages not available via apt — all have pure-Python wheels
-    pip3 install --upgrade pip -q || log_warning "Failed to upgrade pip"
+    pip3 install --upgrade pip --break-system-packages -q || log_warning "Failed to upgrade pip"
 
     pip3 install --break-system-packages \
         adafruit-circuitpython-dht \
@@ -278,13 +287,6 @@ create_config() {
         DEVICE_ID="growmate-$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' || echo 'unknown')"
     fi
 
-    echo ""
-    echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║              Configuration Setup                          ║"
-    echo "║ Press Enter to accept defaults in [brackets].             ║"
-    echo "╚════════════════════════════════════════════════════════════╝"
-    echo ""
-
     # Defaults from .env (or hardcoded if unset)
     SENSOR_URL="${SENSOR_URL:-https://growmate.bond/api/v2/sensors}"
     STREAM_URL="${STREAM_URL:-https://growmate.bond/api/v2/stream/register}"
@@ -302,76 +304,85 @@ create_config() {
     CAM_ENABLED="${CAM_ENABLED:-true}"
     LOG_LEVEL="${LOG_LEVEL:-INFO}"
 
-    # Device
-    read -r -p "  Device ID [$DEVICE_ID]: " input_id
-    DEVICE_ID="${input_id:-$DEVICE_ID}"
+    if ! $AUTO_YES; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════╗"
+        echo "║              Configuration Setup                          ║"
+        echo "║ Press Enter to accept defaults in [brackets].             ║"
+        echo "╚════════════════════════════════════════════════════════════╝"
+        echo ""
 
-    # API
-    read -r -p "  Sensor API URL [$SENSOR_URL]: " input_sensor_url
-    SENSOR_URL="${input_sensor_url:-$SENSOR_URL}"
+        # Device
+        read -r -p "  Device ID [$DEVICE_ID]: " input_id
+        DEVICE_ID="${input_id:-$DEVICE_ID}"
 
-    read -r -p "  Stream Register URL [$STREAM_URL]: " input_stream_url
-    STREAM_URL="${input_stream_url:-$STREAM_URL}"
+        # API
+        read -r -p "  Sensor API URL [$SENSOR_URL]: " input_sensor_url
+        SENSOR_URL="${input_sensor_url:-$SENSOR_URL}"
 
-    # Onboarding
-    read -r -p "  AP mode password [$AP_PASS]: " input_ap_pass
-    AP_PASS="${input_ap_pass:-$AP_PASS}"
+        read -r -p "  Stream Register URL [$STREAM_URL]: " input_stream_url
+        STREAM_URL="${input_stream_url:-$STREAM_URL}"
 
-    # Sensor interval
-    read -r -p "  Sensor reading interval in seconds [$SENSOR_INTERVAL]: " input_interval
-    SENSOR_INTERVAL="${input_interval:-$SENSOR_INTERVAL}"
+        # Onboarding
+        read -r -p "  AP mode password [$AP_PASS]: " input_ap_pass
+        AP_PASS="${input_ap_pass:-$AP_PASS}"
 
-    # DHT22
-    dht_default="y"
-    [ "$DHT22" = "false" ] && dht_default="n"
-    read -r -p "  Enable DHT22 sensor? (y/n) [$dht_default]: " input_dht
-    input_dht="${input_dht:-$dht_default}"
-    if [[ "$input_dht" =~ ^[Yy] ]]; then
-        DHT22="true"
-        read -r -p "  DHT22 GPIO pin [$DHT22_PIN]: " input_dht_pin
-        DHT22_PIN="${input_dht_pin:-$DHT22_PIN}"
-    else
-        DHT22="false"
+        # Sensor interval
+        read -r -p "  Sensor reading interval in seconds [$SENSOR_INTERVAL]: " input_interval
+        SENSOR_INTERVAL="${input_interval:-$SENSOR_INTERVAL}"
+
+        # DHT22
+        dht_default="y"
+        [ "$DHT22" = "false" ] && dht_default="n"
+        read -r -p "  Enable DHT22 sensor? (y/n) [$dht_default]: " input_dht
+        input_dht="${input_dht:-$dht_default}"
+        if [[ "$input_dht" =~ ^[Yy] ]]; then
+            DHT22="true"
+            read -r -p "  DHT22 GPIO pin [$DHT22_PIN]: " input_dht_pin
+            DHT22_PIN="${input_dht_pin:-$DHT22_PIN}"
+        else
+            DHT22="false"
+        fi
+
+        # ADC
+        read -r -p "  ADC I2C address (hex, e.g. 0x48) [$ADC_ADDR]: " input_adc_addr
+        ADC_ADDR="${input_adc_addr:-$ADC_ADDR}"
+
+        read -r -p "  ADC gain [$ADC_GAIN]: " input_gain
+        ADC_GAIN="${input_gain:-$ADC_GAIN}"
+
+        # Relay pins
+        read -r -p "  Pump relay GPIO [$PUMP_PIN]: " input_pump
+        PUMP_PIN="${input_pump:-$PUMP_PIN}"
+
+        read -r -p "  Fertilizer relay GPIO [$FERT_PIN]: " input_fert
+        FERT_PIN="${input_fert:-$FERT_PIN}"
+
+        read -r -p "  Pesticide relay GPIO [$PEST_PIN]: " input_pest
+        PEST_PIN="${input_pest:-$PEST_PIN}"
+
+        # Limit switches
+        read -r -p "  Tank limit switch GPIO [$TANK_PIN]: " input_tank
+        TANK_PIN="${input_tank:-$TANK_PIN}"
+
+        read -r -p "  Drawer limit switch GPIO [$DRAWER_PIN]: " input_drawer
+        DRAWER_PIN="${input_drawer:-$DRAWER_PIN}"
+
+        # Camera
+        cam_default="y"
+        [ "$CAM_ENABLED" = "false" ] && cam_default="n"
+        read -r -p "  Enable rpicam-vid camera? (y/n) [$cam_default]: " input_cam
+        input_cam="${input_cam:-$cam_default}"
+        if [[ "$input_cam" =~ ^[Yy] ]]; then
+            CAM_ENABLED="true"
+        else
+            CAM_ENABLED="false"
+        fi
+
+        # Logging
+        read -r -p "  Log level (DEBUG/INFO/WARNING/ERROR) [$LOG_LEVEL]: " input_log
+        LOG_LEVEL="${input_log:-$LOG_LEVEL}"
     fi
-
-    # ADC
-    read -r -p "  ADC I2C address (hex, e.g. 0x48) [$ADC_ADDR]: " input_adc_addr
-    ADC_ADDR="${input_adc_addr:-$ADC_ADDR}"
-
-    read -r -p "  ADC gain [$ADC_GAIN]: " input_gain
-    ADC_GAIN="${input_gain:-$ADC_GAIN}"
-
-    # Relay pins
-    read -r -p "  Pump relay GPIO [$PUMP_PIN]: " input_pump
-    PUMP_PIN="${input_pump:-$PUMP_PIN}"
-
-    read -r -p "  Fertilizer relay GPIO [$FERT_PIN]: " input_fert
-    FERT_PIN="${input_fert:-$FERT_PIN}"
-
-    read -r -p "  Pesticide relay GPIO [$PEST_PIN]: " input_pest
-    PEST_PIN="${input_pest:-$PEST_PIN}"
-
-    # Limit switches
-    read -r -p "  Tank limit switch GPIO [$TANK_PIN]: " input_tank
-    TANK_PIN="${input_tank:-$TANK_PIN}"
-
-    read -r -p "  Drawer limit switch GPIO [$DRAWER_PIN]: " input_drawer
-    DRAWER_PIN="${input_drawer:-$DRAWER_PIN}"
-
-    # Camera
-    cam_default="y"
-    [ "$CAM_ENABLED" = "false" ] && cam_default="n"
-    read -r -p "  Enable rpicam-vid camera? (y/n) [$cam_default]: " input_cam
-    input_cam="${input_cam:-$cam_default}"
-    if [[ "$input_cam" =~ ^[Yy] ]]; then
-        CAM_ENABLED="true"
-    else
-        CAM_ENABLED="false"
-    fi
-
-    # Logging
-    read -r -p "  Log level (DEBUG/INFO/WARNING/ERROR) [$LOG_LEVEL]: " input_log
-    LOG_LEVEL="${input_log:-$LOG_LEVEL}"
 
     # Provisioned (fresh install = false)
     PROVISIONED="false"
