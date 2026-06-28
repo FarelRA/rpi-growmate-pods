@@ -59,7 +59,7 @@ sudo journalctl -u growmate -n 50
    python3 --version  # Should be 3.9+
    
    # Check if modules load
-   python3 -c "import picamera2, adafruit_ads1x15"
+    python3 -c "import adafruit_ads1x15"
    ```
 
 ### Service Crashes Repeatedly
@@ -552,9 +552,8 @@ sudo python3 /opt/growmate/scripts/monitor_performance.py --continuous
    - Reduce resolution in config.yaml
    - 1920x1080 is usually sufficient
 
-2. **Too frequent captures**
-   - Increase camera_capture interval
-   - 15 minutes (900s) is recommended
+2. **Resolution too high or framerate too high**
+   - Reduce width/height or framerate in `camera.*` config
 
 3. **Excessive logging**
    - Reduce log level in config.yaml
@@ -749,3 +748,157 @@ If you can't resolve your issue:
    - [CONFIGURATION.md](CONFIGURATION.md) - Configuration options
    - [API.md](API.md) - API integration
    - [WIRING.md](WIRING.md) - Wiring details
+   - [device-v2-notes.md](device-v2-notes.md) - V2 device setup
+
+---
+
+## V2-Specific Troubleshooting
+
+Issues specific to the V2 device agent on Raspberry Pi Zero W.
+
+### V2 Camera: rpicam-vid
+
+**Symptom: No camera feed**
+
+```bash
+# Check if rpicam-vid is running
+ps aux | grep rpicam-vid
+
+# Install if missing
+sudo apt install rpicam-apps
+
+# Test camera directly
+rpicam-hello --timeout 5000
+```
+
+**Symptom: Camera hangs after ~30 seconds**
+
+GPU memory too low — increase in `/boot/firmware/config.txt`:
+```ini
+gpu_mem=256
+```
+
+Reboot after change.
+
+**Symptom: Stream is slow or jerky**
+
+WiFi bandwidth insufficient. Reduce bitrate:
+```bash
+# In start.sh, change --bitrate to 500000 (500 Kbps)
+rpicam-vid ... --bitrate 500000 ...
+```
+
+### V2 Tailscale Issues
+
+**Symptom: Tailscale not connecting**
+
+```bash
+# Check status
+tailscale status
+
+# Restart Tailscale
+sudo tailscale down
+sudo tailscale up  # Re-authenticate
+
+# Update Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+```
+
+**Symptom: Stream registration fails**
+
+```bash
+# Check Tailscale IP
+tailscale ip -4
+
+# Verify rpicam-vid is listening
+ss -tlnp | grep 8554
+
+# Test registration manually
+curl -X POST https://growmate.bond/api/v2/stream/register \
+  -H "x-api-key: $DEVICE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId":"'"$DEVICE_ID"'","streamUrl":"tcp://'"$(tailscale ip -4)"':8554"}'
+```
+
+### V2 Sensor Issues
+
+**Symptom: Sensor readings all zero**
+
+```bash
+# Check ADS1115 on I2C bus
+sudo i2cdetect -y 1
+# Should show 0x48
+
+# If empty, check wiring:
+# - SDA → GPIO 2 (Pin 3)
+# - SCL → GPIO 3 (Pin 5)
+# - VDD → 3.3V (Pin 1 or 17)
+# - GND → GND
+```
+
+**Symptom: Battery current always 0**
+
+```bash
+# Check ACS712 output at 0A (should be ~2.5V = Vcc/2)
+# Verify wiring:
+# - ACS712 VCC → 5V
+# - ACS712 OUT → ADS1115 ch0
+# - ACS712 GND → GND
+# - ACS712 IP+ → Battery (+)
+# - ACS712 IP- → Load/charger (-)
+```
+
+**Symptom: Limit switch always reads HIGH**
+
+Missing pull-up resistor or wrong GPIO mode:
+```python
+# Must use internal pull-up
+GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+```
+
+### V2 Relay Issues
+
+**Symptom: Relay not triggering**
+
+Verify V2 GPIO assignments (different from V1):
+```bash
+# V2 pinout:
+# GPIO 17 → Relay 1 (fertilizer valve)
+# GPIO 27 → Relay 2 (pesticide valve)
+# GPIO 10 → Relay 4 (pump)
+
+# Test relay manually
+gpio -g mode 17 out
+gpio -g write 17 1  # Should activate relay
+gpio -g write 17 0  # Should deactivate
+```
+
+### V2 Service Issues
+
+**Symptom: growmate.service fails to start**
+
+```bash
+# Check service status
+sudo systemctl status growmate
+
+# View logs
+sudo journalctl -u growmate -n 50
+
+# Common causes:
+# 1. Tailscale not connected — check ExecStartPre
+# 2. DEVICE_API_KEY or DEVICE_ID not set in service file
+# 3. start.sh not executable: chmod +x /home/pi/growmate/*.sh
+
+# Verify environment variables in service
+sudo systemctl cat growmate
+```
+
+**Symptom: Service starts but main.py exits immediately**
+
+```bash
+# Run main.py manually to see errors
+sudo -u pi DEVICE_API_KEY=test DEVICE_ID=test python3 /home/pi/growmate/main.py
+
+# Check for missing Python packages
+pip3 list | grep -E "ads1x15|circuitpython-dht|RPi.GPIO"
+```

@@ -1,27 +1,26 @@
 [Unit]
-Description=GrowMate Pods - Plant Monitoring System
+Description=GrowMate V2 Agent
 Documentation=https://github.com/FarelRA/rpi-growmate-pods
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
-Group=root
-WorkingDirectory=/opt/growmate/src
-ExecStart=/usr/bin/python3 /opt/growmate/src/main.py
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/growmate
+ExecStartPre=/usr/bin/tailscale status
+ExecStart=/home/pi/growmate/start.sh
 
-# Restart configuration
 Restart=always
 RestartSec=10
 
-# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=growmate
 
-# Environment
-Environment="PYTHONUNBUFFERED=1"
+Environment=DEVICE_API_KEY=<set-during-provisioning>
+Environment=DEVICE_ID=<set-during-provisioning>
 
 [Install]
 WantedBy=multi-user.target

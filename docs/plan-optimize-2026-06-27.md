@@ -1902,6 +1902,23 @@ If issues are discovered but not critical:
 
 ---
 
+## V2 Device Agent Note
+
+This optimization plan was written for the V1 codebase. The actual V2 implementation deferred to a hybrid approach — keeping V1's local-first infrastructure where it added resilience, while adopting V2's hardware and API changes:
+
+- **Async/await retained** — `main.py` uses `asyncio.run()` + APScheduler; the handoff's sync loop was not adopted
+- **APScheduler retained** — async scheduled jobs for sensor reads, uploads, health checks
+- **SQLite queue retained** — 24h offline storage with WAL mode and FIFO drain
+- **Hot-reload config retained** — `config_watcher.py` with watchdog-based reloading
+- **Structured logging retained** — JSON logs with correlation IDs via `logging_config.py`
+- **Web onboarding retained** — AP mode + Flask portal kept as WiFi setup/recovery mechanism; Tailscale added alongside
+- **Camera changed** — picamera2 still images replaced with live H.264 TCP stream via `rpicam-vid`
+- **Calibration retained** — ADC calibration formulas in `sensors.py` with configurable thresholds
+
+See `docs/device-handoff-2026-06-25.md` for the original V2 spec and `docs/v2-application-plan-2026-06-26.md` for the implementation plan.
+
+---
+
 ## Conclusion
 
 This plan completely overhauls the GrowMate RPI implementation to remove all ESP32 constraints and optimize for Raspberry Pi hardware. The result will be a modern, robust, high-performance plant monitoring system that leverages the full capabilities of the Raspberry Pi while maintaining external API compatibility.

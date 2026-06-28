@@ -1,250 +1,175 @@
-"""
-Actuator control module for GrowMate Pods.
-
-Controls GPIO relays for:
-- Water pump (timed duration control)
-- Grow light (on/off control)
-
-Converted from threading to asyncio for better integration with async architecture.
-"""
-
 import time
 import logging
 import asyncio
-from typing import Optional
+from typing import Dict, List, Optional
 from gpiozero import OutputDevice
 
 
 logger = logging.getLogger("growmate.actuators")
 
 
-# GPIO pin assignments (from PLAN.md)
-PUMP_GPIO = 17
-LIGHT_GPIO = 27
+ACTUATOR_DEFAULTS = {
+    "pins": {"pump": 10, "fertilizer": 17, "pesticide": 27},
+    "active_high": True,
+    "initial_value": False,
+    "journal_size": 1000,
+    "journal_trim": 500,
+}
 
-# Pump housekeeping interval
-PUMP_CHECK_INTERVAL = 0.25  # seconds
+
+class PinMap:
+    def __init__(self, pins: dict):
+        self.pump = pins.get("pump", ACTUATOR_DEFAULTS["pins"]["pump"])
+        self.fertilizer = pins.get("fertilizer", ACTUATOR_DEFAULTS["pins"]["fertilizer"])
+        self.pesticide = pins.get("pesticide", ACTUATOR_DEFAULTS["pins"]["pesticide"])
+
+    def kind_to_gpio(self, kind: str) -> int:
+        return {"pump": self.pump, "fertilizer": self.fertilizer, "pesticide": self.pesticide}.get(kind)
+
+    def all_pins(self) -> list:
+        return [self.pump, self.fertilizer, self.pesticide]
 
 
 class ActuatorController:
-    """Controls pump and light actuators via GPIO relays."""
-    
-    def __init__(self):
-        """Initialize actuator controller."""
-        # Initialize GPIO outputs (active_high=True for relay control)
-        self.pump = OutputDevice(PUMP_GPIO, active_high=True, initial_value=False)
-        self.light = OutputDevice(LIGHT_GPIO, active_high=True, initial_value=False)
-        
-        # Pump state tracking
-        self.pump_enabled = False
-        self.pump_deadline: Optional[float] = None
-        self.pump_lock = asyncio.Lock()  # Changed from threading.Lock to asyncio.Lock
-        
-        # Housekeeping task for pump timeout (changed from thread to asyncio task)
-        self.housekeeping_task: Optional[asyncio.Task] = None
-        self.housekeeping_running = False
-        
-        logger.info("Actuator controller initialized")
-    
-    def start_housekeeping(self):
-        """Start housekeeping task for pump timeout management (async version)."""
-        if self.housekeeping_running:
-            return
-        
-        self.housekeeping_running = True
-        # Create async task (will be started by event loop)
-        try:
-            loop = asyncio.get_running_loop()
-            self.housekeeping_task = loop.create_task(self._housekeeping_loop())
-            logger.info("Actuator housekeeping task started")
-        except RuntimeError:
-            # No event loop running yet, task will be created later
-            logger.warning("No event loop running, housekeeping task will be created later")
-    
-    async def async_start_housekeeping(self):
-        """Start housekeeping task for pump timeout management (async version)."""
-        if self.housekeeping_running:
-            return
-        
-        self.housekeeping_running = True
-        self.housekeeping_task = asyncio.create_task(self._housekeeping_loop())
-        logger.info("Actuator housekeeping task started")
-    
-    async def stop_housekeeping(self):
-        """Stop housekeeping task (async version)."""
-        self.housekeeping_running = False
-        if self.housekeeping_task:
-            self.housekeeping_task.cancel()
-            try:
-                await self.housekeeping_task
-            except asyncio.CancelledError:
-                pass
-        logger.info("Actuator housekeeping task stopped")
-    
-    async def _housekeeping_loop(self):
-        """
-        Housekeeping loop to check pump timeout (async version).
-        
-        Runs every 250ms.
-        """
-        while self.housekeeping_running:
-            try:
-                async with self.pump_lock:
-                    if self.pump_enabled and self.pump_deadline:
-                        current_time = time.time()
-                        if current_time >= self.pump_deadline:
-                            # Timeout reached, turn off pump
-                            self.pump.off()
-                            self.pump_enabled = False
-                            self.pump_deadline = None
-                            logger.info("Pump automatically turned off (timeout)")
-                
-                await asyncio.sleep(PUMP_CHECK_INTERVAL)
-                
-            except asyncio.CancelledError:
-                logger.info("Housekeeping task cancelled")
-                break
-            except Exception as e:
-                logger.error(f"Housekeeping error: {e}")
-    
-    async def activate_pump(self, duration_ms: int) -> bool:
-        """
-        Activate water pump for specified duration (async version).
-        
-        Args:
-            duration_ms: Duration in milliseconds
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            async with self.pump_lock:
-                # Turn on pump
-                self.pump.on()
-                self.pump_enabled = True
-                
-                # Set deadline (current time + duration)
-                duration_seconds = duration_ms / 1000.0
-                self.pump_deadline = time.time() + duration_seconds
-                
-                logger.info(f"Pump activated for {duration_ms}ms")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Failed to activate pump: {e}")
-            return False
-    
-    async def deactivate_pump(self) -> bool:
-        """
-        Manually deactivate water pump (async version).
-        
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            async with self.pump_lock:
-                self.pump.off()
-                self.pump_enabled = False
-                self.pump_deadline = None
-                
-                logger.info("Pump manually deactivated")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Failed to deactivate pump: {e}")
-            return False
-    
-    async def set_light(self, enabled: bool) -> bool:
-        """
-        Set grow light state (async version).
-        
-        Args:
-            enabled: True to turn on, False to turn off
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # GPIO operations are fast, but wrap in to_thread for consistency
-            await asyncio.to_thread(self._set_light_sync, enabled)
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to set light state: {e}")
-            return False
-    
-    def _set_light_sync(self, enabled: bool):
-        """Synchronous helper for set_light."""
-        if enabled:
-            self.light.on()
-            logger.info("Grow light turned ON")
-        else:
-            self.light.off()
-            logger.info("Grow light turned OFF")
-    
-    async def get_state(self) -> dict:
-        """
-        Get current actuator state (async version).
-        
-        Returns:
-            Dictionary with pump and light states
-        """
-        async with self.pump_lock:
-            return {
-                'pumpEnabled': self.pump_enabled,
-                'lightEnabled': self.light.is_active
-            }
-    
-    async def process_commands(self, commands: list) -> None:
-        """
-        Process commands from API server (async version).
-        
-        Command format:
-        - {"kind": "pump", "durationMs": 5000}
-        - {"kind": "light", "enabled": true}
-        
-        Args:
-            commands: List of command dictionaries
-        """
+
+    def __init__(self, config: Optional[dict] = None):
+        acfg = config or {}
+        pin_data = acfg.get("pins", ACTUATOR_DEFAULTS["pins"])
+        self._pins = PinMap(pin_data)
+        active_high = acfg.get("active_high", ACTUATOR_DEFAULTS["active_high"])
+        initial = acfg.get("initial_value", ACTUATOR_DEFAULTS["initial_value"])
+        journal_size = acfg.get("journal_size", ACTUATOR_DEFAULTS["journal_size"])
+        journal_trim = acfg.get("journal_trim", ACTUATOR_DEFAULTS["journal_trim"])
+
+        self.pump = OutputDevice(self._pins.pump, active_high=active_high, initial_value=initial)
+        self.fertilizer = OutputDevice(self._pins.fertilizer, active_high=active_high, initial_value=initial)
+        self.pesticide = OutputDevice(self._pins.pesticide, active_high=active_high, initial_value=initial)
+
+        self._relay_journal: List[Dict] = []
+        self._journal_size = journal_size
+        self._journal_trim = journal_trim
+
+        logger.info(
+            "Actuator controller initialized (V2: "
+            f"pump=GPIO{self._pins.pump}, "
+            f"fertilizer=GPIO{self._pins.fertilizer}, "
+            f"pesticide=GPIO{self._pins.pesticide})"
+        )
+
+    def _log_relay(self, pin: int, state: bool, command_kind: str):
+        entry = {
+            "timestamp": time.time(),
+            "pin": pin,
+            "state": "HIGH" if state else "LOW",
+            "command": command_kind,
+        }
+        self._relay_journal.append(entry)
+        if len(self._relay_journal) > self._journal_size:
+            self._relay_journal = self._relay_journal[-self._journal_trim:]
+        logger.info(
+            f"Relay GPIO{pin} → {entry['state']} "
+            f"(triggered by '{command_kind}')"
+        )
+
+    def get_relay_journal(self) -> List[Dict]:
+        return list(self._relay_journal)
+
+    def get_state(self) -> Dict:
+        return {
+            "pumpEnabled": self.pump.is_active,
+            "lightEnabled": False,
+            "fertilizerEnabled": self.fertilizer.is_active,
+            "pesticideEnabled": self.pesticide.is_active,
+        }
+
+    def _get_device(self, kind: str) -> Optional[OutputDevice]:
+        return {
+            "pump": self.pump,
+            "fertilizer": self.fertilizer,
+            "pesticide": self.pesticide,
+        }.get(kind)
+
+    def _reconcile_state(self, executed_kinds: List[str]):
+        for kind in executed_kinds:
+            device = self._get_device(kind)
+            if device is None:
+                continue
+            expected = False
+            actual = device.is_active
+            if actual != expected:
+                pin = self._pins.kind_to_gpio(kind)
+                logger.warning(
+                    f"State reconciliation mismatch for '{kind}': "
+                    f"expected GPIO{pin}=LOW, actual=HIGH"
+                )
+
+    def process_commands(self, commands: List[Dict]) -> None:
         if not commands:
+            logger.debug("No commands to process")
             return
-        
-        for cmd in commands:
-            kind = cmd.get('kind')
-            
-            if kind == 'pump':
-                duration_ms = cmd.get('durationMs', 0)
-                if duration_ms > 0:
-                    await self.activate_pump(duration_ms)
-                else:
-                    logger.warning(f"Invalid pump duration: {duration_ms}")
-            
-            elif kind == 'light':
-                enabled = cmd.get('enabled', False)
-                await self.set_light(enabled)
-            
-            else:
-                logger.warning(f"Unknown command kind: {kind}")
-    
-    async def cleanup(self):
-        """Clean up actuator resources (async version)."""
-        await self.stop_housekeeping()
-        
-        # Turn off all actuators
+
+        light_cmds = [c for c in commands if c.get("kind") == "light"]
+        for cmd in light_cmds:
+            logger.info(
+                f"Light command ignored (V2 has no grow light): "
+                f"{cmd}"
+            )
+
+        relevant = [
+            c for c in commands
+            if c.get("kind") in ("pump", "fertilizer", "pesticide")
+        ]
+        if not relevant:
+            logger.debug("No executable commands (all were light or unknown)")
+            return
+
+        max_ms = max(c.get("durationMs", 0) for c in relevant)
+        if max_ms <= 0:
+            logger.warning(f"All relevant commands have zero/negative duration: {relevant}")
+            return
+
+        for cmd in relevant:
+            kind = cmd["kind"]
+            device = self._get_device(kind)
+            if device is None:
+                continue
+            device.on()
+            self._log_relay(self._pins.kind_to_gpio(kind), True, kind)
+
+        logger.info(
+            f"Relays active: {[c['kind'] for c in relevant]} "
+            f"for {max_ms}ms"
+        )
+
+        time.sleep(max_ms / 1000.0)
+
+        for cmd in relevant:
+            kind = cmd["kind"]
+            device = self._get_device(kind)
+            if device is None:
+                continue
+            device.off()
+            self._log_relay(self._pins.kind_to_gpio(kind), False, kind)
+
+        self._reconcile_state([c["kind"] for c in relevant])
+
+    async def async_process_commands(self, commands: List[Dict]) -> None:
+        await asyncio.to_thread(self.process_commands, commands)
+
+    async def async_get_state(self) -> Dict:
+        return await asyncio.to_thread(self.get_state)
+
+    def cleanup(self):
         try:
             self.pump.off()
-            self.light.off()
+            self.fertilizer.off()
+            self.pesticide.off()
             self.pump.close()
-            self.light.close()
+            self.fertilizer.close()
+            self.pesticide.close()
             logger.info("Actuator cleanup complete")
         except Exception as e:
             logger.warning(f"Actuator cleanup error: {e}")
-    
-    async def __aenter__(self):
-        """Async context manager entry."""
-        await self.async_start_housekeeping()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.cleanup()
+
+    async def async_cleanup(self):
+        await asyncio.to_thread(self.cleanup)

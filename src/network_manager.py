@@ -1,14 +1,3 @@
-"""
-Network management for GrowMate Pods.
-
-Handles WiFi connectivity:
-- AP mode (Access Point) for onboarding
-- Client mode (Station) for normal operation
-- Network scanning and status checking
-
-Converted to async to avoid blocking the event loop.
-"""
-
 import logging
 import subprocess
 import time
@@ -20,64 +9,57 @@ from pathlib import Path
 logger = logging.getLogger("growmate.network")
 
 
-# Network interface
 WLAN_INTERFACE = "wlan0"
 
-# AP mode configuration
 AP_IP_ADDRESS = "192.168.4.1"
 AP_NETMASK = "255.255.255.0"
 AP_DHCP_RANGE_START = "192.168.4.2"
 AP_DHCP_RANGE_END = "192.168.4.20"
 AP_PASSWORD = "growmate"
 
-# Configuration file paths
 HOSTAPD_CONF = "/etc/hostapd/hostapd.conf"
 HOSTAPD_TEMPLATE = "/opt/growmate/config/hostapd.conf.template"
 DNSMASQ_CONF = "/etc/dnsmasq.conf"
 DNSMASQ_TEMPLATE = "/opt/growmate/config/dnsmasq.conf.template"
 WPA_SUPPLICANT_CONF = "/etc/wpa_supplicant/wpa_supplicant.conf"
 
-# Timeouts
-WIFI_CONNECT_TIMEOUT = 12  # seconds
+WIFI_CONNECT_TIMEOUT = 12
 WIFI_CONNECT_RETRIES = 4
 
 
 class NetworkManager:
-    """Manages WiFi network connectivity and AP mode."""
-    
+
     def __init__(self, config: Dict):
-        """
-        Initialize network manager.
-        
-        Args:
-            config: Configuration dictionary
-        """
         self.config = config
         self.ap_ssid = self._get_ap_ssid()
-    
+
+        nw = config.get('network', {})
+        wifi_cfg = nw.get('wifi', {})
+
+        self.wlan_interface = wifi_cfg.get(
+            'interface',
+            config.get('ap_mode', {}).get('interface', WLAN_INTERFACE)
+        )
+        self.wifi_connect_timeout = wifi_cfg.get('connect_timeout', WIFI_CONNECT_TIMEOUT)
+        self.wifi_connect_retries = wifi_cfg.get('connect_retries', WIFI_CONNECT_RETRIES)
+
+        ap = config.get('ap_mode', {})
+        self.ap_password = ap.get('password', AP_PASSWORD)
+        self.ap_ip = ap.get('ip_address', AP_IP_ADDRESS)
+        self.ap_netmask = ap.get('netmask', AP_NETMASK)
+        self.ap_dhcp_start = ap.get('dhcp_range_start', AP_DHCP_RANGE_START)
+        self.ap_dhcp_end = ap.get('dhcp_range_end', AP_DHCP_RANGE_END)
+        self.ap_channel = ap.get('channel', 1)
+
     def _get_ap_ssid(self) -> str:
-        """
-        Generate AP SSID from device ID.
-        
-        Format: "GrowMate-XXXXXX" (last 6 chars)
-        
-        Returns:
-            AP SSID string
-        """
+        ap_cfg = self.config.get('ap_mode', {})
+        explicit = ap_cfg.get('ssid')
+        if explicit:
+            return explicit
         from utils import get_ap_ssid
         return get_ap_ssid()
-    
+
     def _run_command(self, command: List[str], check: bool = True) -> subprocess.CompletedProcess:
-        """
-        Run shell command.
-        
-        Args:
-            command: Command and arguments as list
-            check: Raise exception on non-zero exit code
-            
-        Returns:
-            CompletedProcess instance
-        """
         try:
             result = subprocess.run(
                 command,
@@ -90,257 +72,195 @@ class NetworkManager:
             logger.error(f"Command failed: {' '.join(command)}")
             logger.error(f"Error: {e.stderr}")
             raise
-    
+
     async def scan_networks(self) -> List[Dict]:
-        """
-        Scan for available WiFi networks (async version).
-        
-        Returns:
-            List of network dictionaries with ssid, rssi (dBm), security
-        """
         try:
-            # Use nmcli to scan networks and get RSSI in dBm
-            # Request SSID, SIGNAL (percentage), and SECURITY
             result = await asyncio.to_thread(
                 self._run_command,
                 ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list']
             )
-            
+
             networks = []
             for line in result.stdout.strip().split('\n'):
                 if not line:
                     continue
-                
+
                 parts = line.split(':')
                 if len(parts) >= 2:
                     ssid = parts[0]
                     signal_percent = int(parts[1]) if parts[1].isdigit() else 0
                     security = parts[2] if len(parts) > 2 else ''
-                    
-                    # Convert signal percentage to approximate RSSI in dBm
-                    # Formula: RSSI = -100 + (signal_percent * 0.7)
-                    # This gives range from -100 dBm (0%) to -30 dBm (100%)
+
                     rssi = int(-100 + (signal_percent * 0.7))
-                    
-                    if ssid:  # Skip empty SSIDs
+
+                    if ssid:
                         networks.append({
                             'ssid': ssid,
-                            'rssi': rssi,  # Changed from 'signal' to 'rssi'
+                            'rssi': rssi,
                             'security': security
                         })
-            
+
             logger.info(f"Found {len(networks)} WiFi networks")
             return networks
-            
+
         except Exception as e:
             logger.error(f"Failed to scan networks: {e}")
             return []
-    
+
     def _generate_hostapd_conf(self) -> bool:
-        """
-        Generate hostapd.conf from template with dynamic SSID.
-        
-        Returns:
-            True if successful, False otherwise
-        """
         try:
-            # Read template
             template_path = Path(HOSTAPD_TEMPLATE)
             if not template_path.exists():
-                # Try relative path if absolute doesn't exist
                 template_path = Path(__file__).parent.parent / "config" / "hostapd.conf.template"
-            
+
             if not template_path.exists():
                 logger.error(f"hostapd template not found: {template_path}")
                 return False
-            
+
             template_content = template_path.read_text()
-            
-            # Replace SSID placeholder
-            config_content = template_content.replace('GrowMate-XXXXXX', self.ap_ssid)
-            
-            # Write to hostapd.conf
+
+            config_content = template_content.replace('{SSID}', self.ap_ssid)
+            config_content = config_content.replace('{PASSWORD}', self.ap_password)
+            config_content = config_content.replace('{CHANNEL}', str(self.ap_channel))
+
             conf_path = Path(HOSTAPD_CONF)
             conf_path.write_text(config_content)
-            
+
             logger.info(f"Generated hostapd.conf with SSID: {self.ap_ssid}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to generate hostapd.conf: {e}")
             return False
-    
+
     async def start_ap_mode(self) -> bool:
-        """
-        Start Access Point mode for onboarding (async version).
-        
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             logger.info(f"Starting AP mode: {self.ap_ssid}")
-            
-            # Generate hostapd.conf with correct SSID
+
             if not await asyncio.to_thread(self._generate_hostapd_conf):
                 logger.error("Failed to generate hostapd configuration")
                 return False
-            
-            # Stop any existing network services
+
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'wpa_supplicant'], check=False)
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'NetworkManager'], check=False)
-            
-            # Configure network interface
-            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', WLAN_INTERFACE, 'down'])
-            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', WLAN_INTERFACE])
-            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'add', f'{AP_IP_ADDRESS}/24', 'dev', WLAN_INTERFACE])
-            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', WLAN_INTERFACE, 'up'])
-            
-            # Start hostapd (AP mode)
+
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'])
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface])
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'add', f'{self.ap_ip}/24', 'dev', self.wlan_interface])
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'up'])
+
             await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'hostapd'])
-            
-            # Start dnsmasq (DHCP/DNS)
             await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'dnsmasq'])
-            
-            logger.info(f"AP mode started: {self.ap_ssid} @ {AP_IP_ADDRESS}")
+
+            logger.info(f"AP mode started: {self.ap_ssid} @ {self.ap_ip}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to start AP mode: {e}")
             return False
-    
+
     async def stop_ap_mode(self) -> bool:
-        """
-        Stop Access Point mode (async version).
-        
-        Returns:
-            True if successful, False otherwise
-        """
         try:
             logger.info("Stopping AP mode")
-            
-            # Stop services
+
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'hostapd'], check=False)
             await asyncio.to_thread(self._run_command, ['systemctl', 'stop', 'dnsmasq'], check=False)
-            
-            # Reset network interface
-            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', WLAN_INTERFACE, 'down'], check=False)
-            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', WLAN_INTERFACE], check=False)
-            
-            # Restart NetworkManager if it was stopped
+
+            await asyncio.to_thread(self._run_command, ['ip', 'link', 'set', self.wlan_interface, 'down'], check=False)
+            await asyncio.to_thread(self._run_command, ['ip', 'addr', 'flush', 'dev', self.wlan_interface], check=False)
+
             await asyncio.to_thread(self._run_command, ['systemctl', 'start', 'NetworkManager'], check=False)
-            
+
             logger.info("AP mode stopped")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to stop AP mode: {e}")
             return False
-    
+
     async def connect_to_wifi(self, ssid: str, password: str) -> bool:
-        """
-        Connect to WiFi network in client mode (async version).
-        
-        Args:
-            ssid: WiFi network SSID
-            password: WiFi network password
-            
-        Returns:
-            True if connected, False otherwise
-        """
         try:
             logger.info(f"Connecting to WiFi: {ssid}")
-            
-            # Stop AP mode if running
+
             await self.stop_ap_mode()
-            
-            # Use nmcli to connect
-            result = await asyncio.to_thread(
-                self._run_command,
-                ['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
-                check=False
-            )
-            
-            if result.returncode == 0:
-                logger.info(f"Connected to WiFi: {ssid}")
-                return True
-            else:
-                logger.error(f"Failed to connect to WiFi: {result.stderr}")
-                return False
-            
+
+            for attempt in range(self.wifi_connect_retries):
+                result = await asyncio.to_thread(
+                    self._run_command,
+                    ['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
+                    check=False
+                )
+
+                if result.returncode == 0:
+                    logger.info(f"Connected to WiFi: {ssid}")
+                    return True
+
+                if attempt < self.wifi_connect_retries - 1:
+                    logger.warning(
+                        f"WiFi connection attempt {attempt + 1} failed, "
+                        f"retrying in {self.wifi_connect_timeout}s..."
+                    )
+                    await asyncio.sleep(self.wifi_connect_timeout)
+
+            logger.error(f"Failed to connect to WiFi after {self.wifi_connect_retries} attempts: {ssid}")
+            return False
+
         except Exception as e:
             logger.error(f"WiFi connection error: {e}")
             return False
-    
+
     async def is_connected(self) -> bool:
-        """
-        Check if connected to WiFi (async version).
-        
-        Returns:
-            True if connected, False otherwise
-        """
         try:
             result = await asyncio.to_thread(
                 self._run_command,
                 ['nmcli', '-t', '-f', 'STATE', 'general'],
                 check=False
             )
-            
+
             state = result.stdout.strip()
             connected = 'connected' in state.lower()
-            
+
             return connected
-            
+
         except Exception as e:
             logger.error(f"Failed to check connection status: {e}")
             return False
-    
+
     async def get_ip_address(self) -> Optional[str]:
-        """
-        Get current IP address (async version).
-        
-        Returns:
-            IP address string or None
-        """
         try:
             result = await asyncio.to_thread(
                 self._run_command,
-                ['ip', '-4', 'addr', 'show', WLAN_INTERFACE],
+                ['ip', '-4', 'addr', 'show', self.wlan_interface],
                 check=False
             )
-            
-            # Parse IP address from output
+
             for line in result.stdout.split('\n'):
                 if 'inet ' in line:
                     ip = line.strip().split()[1].split('/')[0]
                     return ip
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Failed to get IP address: {e}")
             return None
 
 
-# Convenience functions (async versions)
 async def start_ap(config: Dict) -> bool:
-    """Start AP mode (async)."""
     manager = NetworkManager(config)
     return await manager.start_ap_mode()
 
 
 async def stop_ap(config: Dict) -> bool:
-    """Stop AP mode (async)."""
     manager = NetworkManager(config)
     return await manager.stop_ap_mode()
 
 
 async def connect_wifi(config: Dict, ssid: str, password: str) -> bool:
-    """Connect to WiFi network (async)."""
     manager = NetworkManager(config)
     return await manager.connect_to_wifi(ssid, password)
 
 
 async def check_connection(config: Dict) -> bool:
-    """Check if connected to WiFi (async)."""
     manager = NetworkManager(config)
     return await manager.is_connected()

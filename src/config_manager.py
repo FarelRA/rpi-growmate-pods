@@ -1,10 +1,9 @@
 """
-Configuration management for GrowMate Pods.
+Configuration management for GrowMate Pods (V2).
 
 Handles YAML configuration file read/write, validation, and hot-reload.
-Configuration is stored at /etc/growmate/config.yaml.
-
-Added Pydantic validation and hot-reload support.
+Secrets come from environment variables; YAML is for non-sensitive defaults.
+Env var override pattern: GROWMATE_<KEY> for any YAML key.
 """
 
 import os
@@ -21,7 +20,7 @@ logger = logging.getLogger("growmate.config")
 # Configuration file path
 CONFIG_DIR = Path("/etc/growmate")
 CONFIG_FILE = CONFIG_DIR / "config.yaml"
-CONFIG_VERSION = 8  # Incremented for validation and hot-reload support
+CONFIG_VERSION = 9  # V2: env var overrides, 60s interval, no camera section
 
 
 class ConfigManager:
@@ -44,38 +43,84 @@ class ConfigManager:
         self.enable_validation = enable_validation
         self.reload_callbacks: List[Callable] = []
         
+    @staticmethod
+    def _get_env_override(key: str) -> Optional[str]:
+        env_map = {
+            "device.id": "DEVICE_ID",
+            "api.api_key": "DEVICE_API_KEY",
+        }
+        if key in env_map:
+            value = os.environ.get(env_map[key])
+            if value:
+                return value
+
+        env_key = "GROWMATE_" + key.upper().replace('.', '_')
+        return os.environ.get(env_key)
+
+    def _apply_env_overrides(self, config: Dict[str, Any]) -> None:
+        flat = {}
+
+        def _flatten(d: Dict[str, Any], prefix: str = ""):
+            for k, v in d.items():
+                full = f"{prefix}.{k}" if prefix else k
+                flat[full] = v
+                if isinstance(v, dict):
+                    _flatten(v, full)
+
+        _flatten(config)
+
+        for key, value in flat.items():
+            override = self._get_env_override(key)
+            if override is not None:
+                existing = flat.get(key)
+                if isinstance(existing, bool):
+                    parsed = override.lower() in ("true", "1", "yes")
+                elif isinstance(existing, int):
+                    try:
+                        parsed = int(override)
+                    except ValueError:
+                        logger.warning(f"Env override {key}={override} is not a valid int, skipping")
+                        continue
+                elif isinstance(existing, float):
+                    try:
+                        parsed = float(override)
+                    except ValueError:
+                        logger.warning(f"Env override {key}={override} is not a valid float, skipping")
+                        continue
+                else:
+                    parsed = override
+
+                keys = key.split('.')
+                target = config
+                for k in keys[:-1]:
+                    target = target.setdefault(k, {})
+                target[keys[-1]] = parsed
+                logger.info(f"Config override from env: {key}={parsed}")
+
     def load(self) -> Dict[str, Any]:
-        """
-        Load configuration from YAML file.
-        
-        Returns:
-            Configuration dictionary
-            
-        Raises:
-            FileNotFoundError: If config file doesn't exist
-            yaml.YAMLError: If config file is invalid
-            ValidationError: If config validation fails
-        """
         if not self.config_path.exists():
             logger.warning(f"Config file not found: {self.config_path}")
-            return self.get_default_config()
-        
+            config = self.get_default_config()
+            self._apply_env_overrides(config)
+            self.config = config
+            return self.config
+
         try:
             with open(self.config_path, 'r') as f:
                 config_dict = yaml.safe_load(f) or {}
                 logger.info(f"Loaded configuration from {self.config_path}")
-                
-                # Validate version
+
                 if config_dict.get('version') != CONFIG_VERSION:
                     logger.warning(
                         f"Config version mismatch: expected {CONFIG_VERSION}, "
                         f"got {config_dict.get('version')}"
                     )
-                
-                # Validate configuration
+
+                self._apply_env_overrides(config_dict)
+
                 if self.enable_validation:
                     self.validate(config_dict)
-                
+
                 self.config = config_dict
                 return self.config
         except yaml.YAMLError as e:
@@ -190,68 +235,162 @@ class ConfigManager:
     
     @staticmethod
     def get_default_config() -> Dict[str, Any]:
-        """
-        Get default configuration.
-        
-        Returns:
-            Default configuration dictionary
-        """
-        from utils import get_device_id, API_SENSOR_ENDPOINT
-        
+        from utils import get_env_device_id, API_SENSOR_ENDPOINT, STREAM_REGISTER_URL
         return {
             'version': CONFIG_VERSION,
             'device': {
-                'id': get_device_id(),
+                'id': get_env_device_id(),
+            },
+            'api': {
+                'sensor_url': API_SENSOR_ENDPOINT,
+                'stream_register_url': STREAM_REGISTER_URL,
+                'timeout_sensor': 30.0,
+                'timeout_stream_register': 10.0,
             },
             'network': {
                 'provisioned': False,
                 'wifi_ssid': '',
                 'wifi_password': '',
+                'wifi': {
+                    'interface': 'wlan0',
+                    'connect_timeout': 12,
+                    'connect_retries': 4,
+                },
             },
-            'api': {
-                'sensor_url': API_SENSOR_ENDPOINT,
-                'camera_url': API_SENSOR_ENDPOINT.replace('/sensors', '/camera'),
+            'ap_mode': {
+                'ssid': 'GrowMate-A1B2C3',
+                'password': 'growmate',
+                'channel': 1,
+                'ip_address': '192.168.4.1',
+                'netmask': '255.255.255.0',
+                'dhcp_range_start': '192.168.4.2',
+                'dhcp_range_end': '192.168.4.20',
+                'interface': 'wlan0',
+            },
+            'onboarding': {
+                'host': '0.0.0.0',
+                'port': 80,
             },
             'intervals': {
-                'sensor_reading': 15,      # seconds
-                'camera_capture': 900,     # seconds (15 minutes)
-            },
-            'camera': {
-                # Full 5MP resolution for Pi Camera v1
-                'width': 2592,             # 5MP width
-                'height': 1944,            # 5MP height
-                'quality': 85,             # JPEG quality (50-100)
-                'add_exif': True,          # Add EXIF metadata
+                'sensor_reading': 60,
+                'failure_monitor': 30,
+                'camera_watchdog': 30,
+                'queue_cleanup': 3600,
+                'queue_vacuum': 604800,
+                'queue_stats': 300,
+                'health_check': 300,
             },
             'queue': {
-                # Offline queue for 1-day capacity
-                'enabled': True,           # Enable offline queue
-                'max_age_hours': 24,       # Delete entries older than this
-                'max_sensor_entries': 6000,  # ~1 day at 15s intervals
-                'max_image_entries': 100,  # ~1 day at 15m intervals
-                'cleanup_interval': 3600,  # seconds (1 hour)
-                'max_retries': 5,          # Maximum upload retry attempts
+                'enabled': True,
+                'db_path': '/var/lib/growmate/queue.db',
+                'max_age_hours': 24,
+                'max_sensor_entries': 1440,
+                'cleanup_interval': 3600,
+                'max_retries': 5,
+                'vacuum_interval': 604800,
+            },
+            'upload_processor': {
+                'max_concurrent': 3,
+                'delay': 0.5,
+                'idle_sleep': 2.0,
+                'batch_sleep': 0.1,
             },
             'retry': {
-                # Exponential backoff with jitter
-                'max_attempts': 6,         # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s
-                'initial_delay': 1.0,      # seconds
-                'max_delay': 32.0,         # seconds
-                'jitter': 0.25,            # ±25% random jitter
+                'max_attempts': 6,
+                'initial_delay': 1.0,
+                'max_delay': 32.0,
+                'jitter': 0.25,
             },
             'circuit_breaker': {
-                # Circuit breaker pattern
-                'failure_threshold': 5,    # Open circuit after N consecutive failures
-                'recovery_timeout': 60,    # seconds in OPEN state before HALF_OPEN
-                'success_threshold': 2,    # Close circuit after N successes in HALF_OPEN
-            },
-            'calibration': {
-                'soil_moisture': {'min': 0, 'max': 65535},
-                'light': {'min': 0, 'max': 65535},
-                'water_level': {'min': 0, 'max': 65535},
+                'failure_threshold': 5,
+                'recovery_timeout': 60,
+                'success_threshold': 2,
             },
             'sensors': {
                 'enable_dht22': True,
+                'dht22_pin': 4,
+                'adc': {
+                    'i2c_bus': 1,
+                    'i2c_address': 0x48,
+                    'gain': 1,
+                    'samples': 8,
+                    'sample_delay': 0.01,
+                    'max_value': 65535,
+                },
+                'channels': {
+                    'battery_current': 0,
+                    'light': 1,
+                    'water': 2,
+                    'soil': 3,
+                },
+                'calibration': {
+                    'soil': {'min': 0, 'max': 65535},
+                    'light': {'min': 0, 'max': 65535},
+                    'water': {'min': 0, 'max': 65535},
+                },
+                'battery_current': {
+                    'midpoint_voltage': 2.5,
+                    'sensitivity': 0.185,
+                },
+                'limit_switches': {
+                    'tank_gpio': 20,
+                    'drawer_gpio': 21,
+                    'pull_up_down': 'PUD_UP',
+                    'debounce_ms': 50,
+                    'debounce_samples': 5,
+                    'debounce_sample_interval': 0.01,
+                },
+                'health': {
+                    'failure_threshold': 3,
+                },
+            },
+            'actuators': {
+                'pins': {
+                    'pump': 10,
+                    'fertilizer': 17,
+                    'pesticide': 27,
+                },
+                'active_high': True,
+                'initial_value': False,
+                'journal_size': 1000,
+                'journal_trim': 500,
+            },
+            'camera': {
+                'enabled': True,
+                'port': 8554,
+                'width': 640,
+                'height': 480,
+                'framerate': 15,
+                'bitrate': 1000000,
+                'profile': 'baseline',
+                'level': '3.1',
+                'denoise': 'cdn_off',
+                'restart_delay': 0.5,
+            },
+            'failure': {
+                'consecutive_threshold': 5,
+            },
+            'health_monitor': {
+                'history_size': 100,
+                'camera_crash_threshold': 5,
+            },
+            'stream_registration': {
+                'max_attempts': 10,
+                'base_delay': 1.0,
+                'max_delay': 60.0,
+            },
+            'logging': {
+                'level': 'INFO',
+                'file': '/var/log/growmate/growmate.log',
+                'format': 'json',
+                'max_bytes': 10485760,
+                'backup_count': 5,
+                'modules': {},
+            },
+            'features': {
+                'offline_queue': True,
+                'hot_reload': True,
+                'circuit_breaker': True,
             },
         }
     
@@ -321,15 +460,16 @@ class ConfigManager:
             logger.error(f"Failed to parse config file during reload: {e}")
             raise
         
-        # Validate new config
+        # Apply env var overrides to the new config (they always win)
+        self._apply_env_overrides(new_config)
+
         if self.enable_validation:
             try:
                 self.validate(new_config)
             except ValidationError as e:
                 logger.error(f"New configuration is invalid, keeping current config: {e}")
                 raise
-        
-        # Get changes
+
         changes = get_config_changes(old_config, new_config)
         
         if not changes:

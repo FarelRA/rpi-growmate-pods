@@ -1,161 +1,409 @@
-# GrowMate Pods Configuration Example
-# Copy this file to /etc/growmate/config.yaml and customize
+# GrowMate Pods V2 — Configuration
+# =================================
+# Copy to /etc/growmate/config.yaml and edit.
+# During install.sh you will be prompted for the essential fields.
+#
+# Env var overrides (take precedence over YAML values):
+#   DEVICE_ID          → device.id
+#   DEVICE_API_KEY     → api.api_key
+#   GROWMATE_<KEY>     → any dotted key (e.g. GROWMATE_API_SENSOR_URL)
+#
+# Secrets (API key, WiFi password) should ONLY be set via env vars
+# or systemd Environment=; do NOT commit them to this file.
 
-# Configuration version (incremented for breaking changes)
-version: 8
+# ---------------------------------------------------------------------------
+# version — Schema version (required, matches CONFIG_VERSION in source)
+# ---------------------------------------------------------------------------
+# V1 = 8, V2 = 9.  Bump only on breaking config changes.
+version: 9
 
-# Device identification
+# ---------------------------------------------------------------------------
+# device — Identity
+# ---------------------------------------------------------------------------
 device:
-  # Device ID (auto-generated from MAC address if not specified)
+  # id — Unique device identifier.
+  # Regex: ^[a-zA-Z0-9_-]+$, max 128 chars.
+  # Auto-generated from MAC address if omitted (growmate-<mac>).
+  # Override via DEVICE_ID env var.
   id: "growmate-b827eb123456"
 
-# Network configuration
+# ---------------------------------------------------------------------------
+# api — Backend endpoints, timeouts, auth
+# ---------------------------------------------------------------------------
+api:
+  # sensor_url — POST endpoint for JSON sensor payloads.
+  # The server responds with an optional command array.
+  sensor_url: "https://growmate.bond/api/v2/sensors"
+
+  # stream_register_url — POST endpoint to register rpicam-vid TCP stream.
+  stream_register_url: "https://growmate.bond/api/v2/stream/register"
+
+  # timeout_sensor — HTTP timeout in seconds for sensor uploads.
+  timeout_sensor: 30.0
+
+  # timeout_stream_register — HTTP timeout in seconds for stream registration.
+  timeout_stream_register: 10.0
+
+  # api_key — API key for x-api-key header.
+  # SECRET: set via DEVICE_API_KEY env var instead of putting it here.
+  # api_key: ""
+
+# ---------------------------------------------------------------------------
+# network — WiFi provisioning (manipulated by onboarding portal)
+# ---------------------------------------------------------------------------
+# NON-RELOADABLE: changing these requires a service restart.
 network:
-  # Provisioning status (set to true after onboarding)
+  # provisioned — true after successful onboarding.
+  # When false, the device boots into AP mode for first-time setup.
   provisioned: false
-  
-  # WiFi credentials (configured via onboarding portal)
+
+  # wifi_ssid — Target WiFi network (set by onboarding portal).
   wifi_ssid: ""
+
+  # wifi_password — WiFi password (set by onboarding portal).
+  # SECRET: stored in this file only during onboarding; use env vars otherwise.
   wifi_password: ""
 
-# API endpoints
-api:
-  # Sensor data upload endpoint
-  sensor_url: "https://avid-mammoth-766.convex.site/api/sensors"
-  
-  # Camera image upload endpoint
-  camera_url: "https://avid-mammoth-766.convex.site/api/camera"
-  
-  # API timeouts (in seconds)
-  timeout_sensor: 12.0
-  timeout_camera: 45.0
+  # wifi — WiFi client-mode connection settings
+  wifi:
+    # interface — Wireless interface name.
+    interface: "wlan0"
 
-# Reading intervals (in seconds)
+    # connect_timeout — Seconds to wait for connection before giving up.
+    connect_timeout: 12
+
+    # connect_retries — Number of connection attempts.
+    connect_retries: 4
+
+# ---------------------------------------------------------------------------
+# ap_mode — Access Point mode settings (first-time setup / recovery)
+# ---------------------------------------------------------------------------
+ap_mode:
+  # ssid — AP SSID broadcast in AP mode (max 32 chars).
+  # Auto-generated as "GrowMate-<MAC>" if omitted or empty.
+  ssid: "GrowMate-A1B2C3"
+
+  # password — AP password (min 8 chars, max 63 chars for WPA2-PSK).
+  password: "growmate"
+
+  # channel — WiFi channel (1–11 for 2.4 GHz, auto if omitted/0).
+  channel: 1
+
+  # ip_address — AP gateway address.
+  ip_address: "192.168.4.1"
+
+  # netmask — AP network mask.
+  netmask: "255.255.255.0"
+
+  # dhcp_range_start — First address in DHCP pool.
+  dhcp_range_start: "192.168.4.2"
+
+  # dhcp_range_end — Last address in DHCP pool.
+  dhcp_range_end: "192.168.4.20"
+
+  # interface — AP wireless interface (same as wifi client interface typically).
+  interface: "wlan0"
+
+# ---------------------------------------------------------------------------
+# onboarding — Onboarding portal settings
+# ---------------------------------------------------------------------------
+onboarding:
+  # host — Flask server bind address (use 0.0.0.0 in AP mode).
+  host: "0.0.0.0"
+
+  # port — Flask server port (80 = no port number in browser).
+  port: 80
+
+# ---------------------------------------------------------------------------
+# intervals — Periodic task timing (all RELOADABLE)
+# ---------------------------------------------------------------------------
 intervals:
-  # How often to read sensors and upload data
-  sensor_reading: 15
-  
-  # How often to capture and upload camera images
-  camera_capture: 900  # 15 minutes
+  # sensor_reading — seconds between sensor read + upload cycles (10–300).
+  sensor_reading: 60
 
-# Camera configuration (Full 5MP support)
-camera:
-  # Resolution (5MP = 2592x1944)
-  width: 2592
-  height: 1944
-  
-  # JPEG quality (50-100, higher = better quality but larger files)
-  quality: 85
-  
-  # Add EXIF metadata (timestamp, device ID, sensor readings)
-  add_exif: true
+  # failure_monitor — seconds between failure threshold checks.
+  failure_monitor: 30
 
-# Sensor calibration values
-# These map raw ADC values (0-65535) to percentages (0-100%)
-calibration:
-  # Soil moisture sensor
-  soil:
-    min: 0      # Raw value when completely dry
-    max: 65535  # Raw value when completely wet
-  
-  # Light sensor
-  light:
-    min: 0      # Raw value in darkness
-    max: 65535  # Raw value in bright light
-  
-  # Water level sensor
-  water:
-    min: 0      # Raw value when empty
-    max: 65535  # Raw value when full
+  # camera_watchdog — seconds between rpicam-vid process checks.
+  camera_watchdog: 30
 
-# Sensor feature flags
-sensors:
-  # Enable DHT22 temperature/humidity sensor
-  enable_dht22: true
-  
-  # ADC sampling configuration
-  adc_samples: 8
-  adc_sample_delay: 0.01
+  # queue_cleanup — seconds between queue purge runs.
+  queue_cleanup: 3600
 
-# Queue configuration (Offline operation)
+  # queue_vacuum — seconds between SQLite VACUUM operations (7 days).
+  queue_vacuum: 604800
+
+  # queue_stats — seconds between queue depth log messages.
+  queue_stats: 300
+
+  # health_check — seconds between health monitor metric publications.
+  health_check: 300
+
+# ---------------------------------------------------------------------------
+# queue — Offline data buffering (NON-RELOADABLE)
+# ---------------------------------------------------------------------------
 queue:
-  # Enable offline queue (stores data when network is unavailable)
+  # enabled — Enable SQLite-backed offline queue.
   enabled: true
-  
-  # Maximum age of queued entries (in hours)
+
+  # db_path — SQLite database file location.
+  db_path: "/var/lib/growmate/queue.db"
+
+  # max_age_hours — purge entries older than this (1–168).
   max_age_hours: 24
-  
-  # Maximum number of sensor entries (~1 day at 15s intervals)
-  max_sensor_entries: 6000
-  
-  # Maximum number of image entries (~1 day at 15m intervals)
-  max_image_entries: 100
-  
-  # Cleanup interval (in seconds)
-  cleanup_interval: 3600  # 1 hour
 
-# Retry configuration (Exponential backoff)
+  # max_sensor_entries — cap for sensor queue entries.
+  max_sensor_entries: 1440
+
+  # cleanup_interval — how often the purge job runs (overrides intervals.queue_cleanup).
+  cleanup_interval: 3600
+
+  # max_retries — upload attempts before discarding an entry (1–20).
+  max_retries: 5
+
+  # vacuum_interval — seconds between SQLite VACUUM (overrides intervals.queue_vacuum).
+  vacuum_interval: 604800
+
+# ---------------------------------------------------------------------------
+# upload_processor — Queue drain settings
+# ---------------------------------------------------------------------------
+upload_processor:
+  # max_concurrent — Number of simultaneous uploads (default: 3).
+  max_concurrent: 3
+
+  # delay — Seconds between processing queue items (default: 0.5).
+  delay: 0.5
+
+  # idle_sleep — Seconds to sleep when queue is empty (default: 2.0).
+  idle_sleep: 2.0
+
+  # batch_sleep — Seconds to sleep after processing an item (default: 0.1).
+  batch_sleep: 0.1
+
+# ---------------------------------------------------------------------------
+# retry — Exponential back-off (all RELOADABLE)
+# ---------------------------------------------------------------------------
 retry:
-  # Maximum number of retry attempts
+  # max_attempts — Total HTTP retries per call (1–10).
   max_attempts: 6
-  
-  # Initial delay between retries (in seconds)
-  initial_delay: 1.0
-  
-  # Maximum delay between retries (in seconds)
-  max_delay: 32.0
-  
-  # Jitter factor (±percentage to prevent thundering herd)
-  jitter: 0.25  # ±25%
 
-# Circuit breaker configuration (Prevent cascading failures)
+  # initial_delay — First retry delay in seconds (0.1–10.0).
+  initial_delay: 1.0
+
+  # max_delay — Ceiling for exponential back-off (1.0–300.0, >= initial_delay).
+  max_delay: 32.0
+
+  # jitter — Randomisation factor 0.0–0.5 (avoids thundering herd).
+  jitter: 0.25
+
+# ---------------------------------------------------------------------------
+# circuit_breaker — Failure isolation (all RELOADABLE)
+# ---------------------------------------------------------------------------
 circuit_breaker:
-  # Number of consecutive failures before opening circuit
+  # failure_threshold — Consecutive failures before circuit opens (1–20).
   failure_threshold: 5
-  
-  # Time to wait before attempting recovery (in seconds)
+
+  # recovery_timeout — Seconds before HALF-OPEN probe is allowed (5–600).
   recovery_timeout: 60
-  
-  # Number of consecutive successes needed to close circuit
+
+  # success_threshold — Consecutive successes in HALF-OPEN to close (1–10).
   success_threshold: 2
 
-# Logging configuration (Structured JSON logs)
-logging:
-  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  level: "INFO"
-  
-  # Log format (json or text)
-  format: "json"
-  
-  # Log file path
-  file: "/var/log/growmate/growmate.log"
-  
-  # Maximum log file size (in bytes, 10MB)
-  max_bytes: 10485760
-  
-  # Number of backup log files to keep
-  backup_count: 5
-  
-  # Per-module log levels (hot-reloadable)
-  modules:
-    sensors: "INFO"
-    camera: "INFO"
-    api_client: "INFO"
-    queue: "INFO"
-    scheduler: "INFO"
-    actuators: "INFO"
-    network: "INFO"
+# ---------------------------------------------------------------------------
+# sensors — ADC, debounce, calibration, pinout (NON-RELOADABLE)
+# ---------------------------------------------------------------------------
+sensors:
+  # enable_dht22 — Set false if no DHT22 is wired.
+  enable_dht22: true
 
-# Feature flags
+  # dht22_pin — GPIO pin for DHT22 data line.
+  dht22_pin: 4
+
+  # adc — ADS1115 Analog-to-Digital Converter settings
+  adc:
+    # i2c_bus — I2C bus number (0 or 1 on Pi Zero W).
+    i2c_bus: 1
+
+    # i2c_address — ADS1115 I2C address (0x48, 0x49, 0x4A, or 0x4B).
+    i2c_address: 0x48
+
+    # gain — Programmable gain amplifier setting (1 = ±4.096V).
+    gain: 1
+
+    # samples — Number of ADC samples to average per reading.
+    samples: 8
+
+    # sample_delay — Seconds between successive samples.
+    sample_delay: 0.01
+
+    # max_value — Maximum raw ADC value (16-bit = 65535).
+    max_value: 65535
+
+  # channels — ADC channel-to-sensor mapping.
+  # Each channel is a 0-based ADS1115 differential input (P0–P3).
+  channels:
+    battery_current: 0
+    light: 1
+    water: 2
+    soil: 3
+
+  # calibration — Raw-value-to-percentage mapping per sensor.
+  calibration:
+    soil:
+      min: 0
+      max: 65535
+    light:
+      min: 0
+      max: 65535
+    water:
+      min: 0
+      max: 65535
+
+  # battery_current — ACS712 current sensor formula parameters.
+  battery_current:
+    # midpoint_voltage — Voltage at 0 A (typically VCC/2 = 2.5 V).
+    midpoint_voltage: 2.5
+
+    # sensitivity — mV per A (ACS712 5A = 185 mV/A).
+    sensitivity: 0.185
+
+  # limit_switches — Tank and drawer switch GPIO pinout + debounce.
+  limit_switches:
+    tank_gpio: 20
+    drawer_gpio: 21
+
+    # pull_up_down — Internal pull resistor (PUD_UP or PUD_DOWN).
+    pull_up_down: "PUD_UP"
+
+    # debounce_ms — Settle time before sampling (milliseconds).
+    debounce_ms: 50
+
+    # debounce_samples — Majority-vote sample count (3-of-5 = 5 samples).
+    debounce_samples: 5
+
+    # debounce_sample_interval — Seconds between samples during debounce.
+    debounce_sample_interval: 0.01
+
+  # health — Per-sensor degradation tracking.
+  health:
+    # failure_threshold — Consecutive failures before marking sensor degraded.
+    failure_threshold: 3
+
+# ---------------------------------------------------------------------------
+# actuators — Relay pinout + behaviour (NON-RELOADABLE)
+# ---------------------------------------------------------------------------
+actuators:
+  # pins — GPIO pin numbers for each relay.
+  pins:
+    pump: 10
+    fertilizer: 17
+    pesticide: 27
+
+  # active_high — True if relay energises on HIGH, False if on LOW.
+  active_high: true
+
+  # initial_value — Startup state for all relays.
+  initial_value: false
+
+  # journal_size — Max relay state-change history entries.
+  journal_size: 1000
+
+  # journal_trim — Keep this many entries after trimming.
+  journal_trim: 500
+
+# ---------------------------------------------------------------------------
+# camera — rpicam-vid live H.264 stream (NON-RELOADABLE)
+# ---------------------------------------------------------------------------
+camera:
+  # enabled — Start camera stream on boot.
+  enabled: true
+
+  # port — TCP listen port for the H.264 stream.
+  port: 8554
+
+  # width — Video width in pixels.
+  width: 640
+
+  # height — Video height in pixels.
+  height: 480
+
+  # framerate — Target frames per second.
+  framerate: 15
+
+  # bitrate — Target bitrate in bits per second.
+  bitrate: 1000000
+
+  # profile — H.264 profile (baseline, main, high).
+  profile: "baseline"
+
+  # level — H.264 level (3.1 for 720p, 4.0/4.1 for 1080p/5MP).
+  level: "3.1"
+
+  # denoise — Denoise mode (cdn_off, cdn_fast, cdn_hq).
+  denoise: "cdn_off"
+
+  # restart_delay — Seconds to wait before restarting after a crash.
+  restart_delay: 0.5
+
+# ---------------------------------------------------------------------------
+# failure — Failure detection and recovery thresholds
+# ---------------------------------------------------------------------------
+failure:
+  # consecutive_threshold — How many consecutive sensor failures trigger re-onboarding.
+  consecutive_threshold: 5
+
+# ---------------------------------------------------------------------------
+# health_monitor — System health tracking
+# ---------------------------------------------------------------------------
+health_monitor:
+  # history_size — Max number of historical health snapshots kept in memory.
+  history_size: 100
+
+  # camera_crash_threshold — Crashes in last hour to trigger UNHEALTHY status.
+  camera_crash_threshold: 5
+
+# ---------------------------------------------------------------------------
+# stream_registration — rpicam-vid stream registration retry
+# ---------------------------------------------------------------------------
+stream_registration:
+  # max_attempts — Total registration retry attempts at startup.
+  max_attempts: 10
+
+  # base_delay — Initial retry delay in seconds (doubles each attempt).
+  base_delay: 1.0
+
+  # max_delay — Ceiling for registration retry back-off.
+  max_delay: 60.0
+
+# ---------------------------------------------------------------------------
+# logging — Log level, format, rotation, per-module overrides (RELOADABLE)
+# ---------------------------------------------------------------------------
+logging:
+  # level — Root logger level.
+  level: "INFO"
+
+  # file — Log file path (console-only if empty or unwritable).
+  file: "/var/log/growmate/growmate.log"
+
+  # format — "json" for structured logs, "text" for plain.
+  format: "json"
+
+  # max_bytes — Max file size before rotation (default 10 MB).
+  max_bytes: 10485760
+
+  # backup_count — Number of rotated log files to keep.
+  backup_count: 5
+
+  # modules — Per-module level overrides (e.g. "growmate.sensors": "DEBUG").
+  modules:
+    # growmate.sensors: "DEBUG"
+    # growmate.api: "WARNING"
+    {}
+
+# ---------------------------------------------------------------------------
+# features — Feature flags (all RELOADABLE)
+# ---------------------------------------------------------------------------
 features:
-  # Enable offline queue
   offline_queue: true
-  
-  # Enable hot-reload (config changes without restart)
   hot_reload: true
-  
-  # Enable structured JSON logging
-  structured_logging: true
-  
-  # Enable circuit breaker
   circuit_breaker: true

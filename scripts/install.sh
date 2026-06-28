@@ -1,71 +1,56 @@
 #!/bin/bash
 #
-# GrowMate Pods - Automated Installation Script
+# GrowMate V2 - Automated Installation Script
 # Raspberry Pi Zero W Installation
 #
-# This script installs the GrowMate plant monitoring system on a fresh
+# This script installs the GrowMate V2 plant monitoring system on a fresh
 # Raspberry Pi OS installation. It handles all dependencies, system
 # configuration, and service setup.
+#
+# V2 changes:
+# - Installs to /home/pi/growmate/ (runs as pi user, not root)
+# - Keeps AP mode (hostapd + dnsmasq) for first-time WiFi setup and recovery
+# - Adds Tailscale for day-to-day secure connectivity
+# - Uses rpicam-vid (rpicam-apps) for live camera stream (no picamera2)
+# - Secrets from env vars (DEVICE_API_KEY, DEVICE_ID), not config.yaml
+# - Interactive config.yaml creation during install
 #
 # Usage:
 #   sudo ./install.sh
 #
-# Or remote installation:
-#   curl -sSL https://raw.githubusercontent.com/FarelRA/rpi-growmate-pods/main/scripts/install.sh | sudo bash
-#
+set -e
 
-set -e  # Exit on any error
-
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Installation paths
-INSTALL_DIR="/opt/growmate"
-CONFIG_DIR="/etc/growmate"
+INSTALL_DIR="/home/pi/growmate"
 SERVICE_FILE="/etc/systemd/system/growmate.service"
+CONFIG_DIR="/etc/growmate"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+error_exit() { log_error "$1"; exit 1; }
 
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Error handler
-error_exit() {
-    log_error "$1"
-    exit 1
-}
-
-# Print banner
 print_banner() {
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
     echo "║                                                            ║"
-    echo "║              GrowMate Pods - Installation                  ║"
-    echo "║          Raspberry Pi Zero W Plant Monitoring              ║"
+    echo "║            GrowMate V2 - Installation                      ║"
+    echo "║      Raspberry Pi Zero W Plant Monitoring System           ║"
     echo "║                                                            ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
 }
 
-# Check if running as root
 check_root() {
     log_info "Checking root privileges..."
     if [ "$EUID" -ne 0 ]; then
@@ -74,7 +59,6 @@ check_root() {
     log_success "Running as root"
 }
 
-# Check if running on Raspberry Pi
 check_platform() {
     log_info "Checking platform..."
     if [ ! -f /proc/device-tree/model ]; then
@@ -88,270 +72,469 @@ check_platform() {
     fi
 }
 
-# Update system packages
 update_system() {
     log_info "Updating system packages..."
     apt-get update -qq || error_exit "Failed to update package lists"
     log_success "System package lists updated"
 }
 
-# Install system dependencies
 install_system_deps() {
     log_info "Installing system dependencies..."
-    
+
     PACKAGES=(
-        # Python
         python3
         python3-pip
         python3-dev
         python3-venv
-        
-        # I2C tools
+
         i2c-tools
-        
-        # GPIO libraries
+
         libgpiod2
         python3-libgpiod
-        
-        # Camera support
-        libcamera-apps
-        python3-libcamera
-        python3-picamera2
-        
-        # Network tools for AP mode
+
+        rpicam-apps
+
         hostapd
         dnsmasq
-        
-        # Build tools (for some Python packages)
+
         build-essential
-        
-        # System utilities
+
         git
         curl
     )
-    
+
     log_info "Installing: ${PACKAGES[*]}"
     apt-get install -y -qq "${PACKAGES[@]}" || error_exit "Failed to install system dependencies"
     log_success "System dependencies installed"
 }
 
-# Enable I2C interface
+install_tailscale() {
+    log_info "Installing Tailscale..."
+
+    if command -v tailscale &>/dev/null; then
+        log_success "Tailscale already installed ($(tailscale version 2>/dev/null | head -1))"
+        return
+    fi
+
+    curl -fsSL https://tailscale.com/install.sh | sh || error_exit "Failed to install Tailscale"
+    log_success "Tailscale installed"
+
+    log_info "Bring up Tailscale (you'll need to authenticate)..."
+    tailscale up || log_warning "Tailscale up failed. Run 'sudo tailscale up' manually after install."
+}
+
 enable_i2c() {
     log_info "Enabling I2C interface..."
-    
-    # Check if I2C is already enabled
+
     if lsmod | grep -q i2c_bcm2835; then
         log_success "I2C already enabled"
         return
     fi
-    
-    # Enable I2C using raspi-config non-interactive mode
+
     raspi-config nonint do_i2c 0 || log_warning "Failed to enable I2C via raspi-config"
-    
-    # Ensure I2C modules are loaded
+
     if ! grep -q "^i2c-dev" /etc/modules; then
         echo "i2c-dev" >> /etc/modules
     fi
     if ! grep -q "^i2c-bcm2835" /etc/modules; then
         echo "i2c-bcm2835" >> /etc/modules
     fi
-    
-    # Load I2C modules immediately
+
     modprobe i2c-dev 2>/dev/null || true
     modprobe i2c-bcm2835 2>/dev/null || true
-    
+
     log_success "I2C interface enabled"
 }
 
-# Enable Camera interface
-enable_camera() {
-    log_info "Enabling Camera interface..."
-    
-    # Enable camera using raspi-config non-interactive mode
-    raspi-config nonint do_camera 0 || log_warning "Failed to enable camera via raspi-config"
-    
-    # For newer Raspberry Pi OS (Bullseye+), camera is enabled by default with libcamera
-    log_success "Camera interface enabled"
-}
-
-# Create installation directory
 create_install_dir() {
     log_info "Creating installation directory: $INSTALL_DIR"
-    
-    # Backup existing installation if present
+
     if [ -d "$INSTALL_DIR" ]; then
         BACKUP_DIR="${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
         log_warning "Existing installation found. Backing up to: $BACKUP_DIR"
         mv "$INSTALL_DIR" "$BACKUP_DIR"
     fi
-    
+
     mkdir -p "$INSTALL_DIR"
     log_success "Installation directory created"
 }
 
-# Copy project files
 copy_files() {
     log_info "Copying project files to $INSTALL_DIR..."
-    
-    # Copy source files
-    cp -r "$PROJECT_ROOT/src" "$INSTALL_DIR/" || error_exit "Failed to copy src/"
-    cp -r "$PROJECT_ROOT/templates" "$INSTALL_DIR/" || error_exit "Failed to copy templates/"
-    cp -r "$PROJECT_ROOT/static" "$INSTALL_DIR/" || error_exit "Failed to copy static/"
-    cp -r "$PROJECT_ROOT/config" "$INSTALL_DIR/" || error_exit "Failed to copy config/"
-    cp "$PROJECT_ROOT/requirements.txt" "$INSTALL_DIR/" || error_exit "Failed to copy requirements.txt"
-    
-    # Copy documentation
+
+    cp -r "$PROJECT_ROOT/src" "$INSTALL_DIR/"
+    cp -r "$PROJECT_ROOT/templates" "$INSTALL_DIR/"
+    cp -r "$PROJECT_ROOT/static" "$INSTALL_DIR/"
+    cp "$PROJECT_ROOT/requirements.txt" "$INSTALL_DIR/"
+
+    cp "$PROJECT_ROOT/scripts/start.sh" "$INSTALL_DIR/"
+
     [ -f "$PROJECT_ROOT/README.md" ] && cp "$PROJECT_ROOT/README.md" "$INSTALL_DIR/"
-    [ -f "$PROJECT_ROOT/WIRING.md" ] && cp "$PROJECT_ROOT/WIRING.md" "$INSTALL_DIR/"
-    
+
     log_success "Project files copied"
 }
 
-# Install Python dependencies
 install_python_deps() {
     log_info "Installing Python dependencies..."
-    
-    # Install dependencies system-wide (service runs as root)
+
     pip3 install --upgrade pip -q || log_warning "Failed to upgrade pip"
     pip3 install -r "$INSTALL_DIR/requirements.txt" -q || error_exit "Failed to install Python dependencies"
-    
+
     log_success "Python dependencies installed"
 }
 
-# Create configuration directory
-create_config_dir() {
-    log_info "Creating configuration directory: $CONFIG_DIR"
-    
-    mkdir -p "$CONFIG_DIR"
-    chmod 755 "$CONFIG_DIR"
-    
-    # Copy example configuration if it doesn't exist
-    if [ ! -f "$CONFIG_DIR/config.yaml" ] && [ -f "$INSTALL_DIR/config/config.yaml.example" ]; then
-        log_info "Creating example configuration file"
-        cp "$INSTALL_DIR/config/config.yaml.example" "$CONFIG_DIR/config.yaml.example"
-    fi
-    
-    log_success "Configuration directory created"
+configure_ap_mode() {
+    log_info "Configuring AP mode support (first-time setup and recovery)..."
+
+    systemctl stop hostapd 2>/dev/null || true
+    systemctl stop dnsmasq 2>/dev/null || true
+
+    systemctl disable hostapd 2>/dev/null || true
+    systemctl disable dnsmasq 2>/dev/null || true
+
+    systemctl unmask hostapd 2>/dev/null || true
+
+    cp "$PROJECT_ROOT/config/hostapd.conf.template" "$INSTALL_DIR/"
+    cp "$PROJECT_ROOT/config/dnsmasq.conf.template" "$INSTALL_DIR/"
+
+    log_success "AP mode support configured"
 }
 
-# Install systemd service
+create_config() {
+    log_info "Creating configuration file: $CONFIG_FILE"
+
+    mkdir -p "$CONFIG_DIR"
+
+    # Detect device ID from MAC
+    DEVICE_ID="growmate-$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':' || echo 'unknown')"
+
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════╗"
+    echo "║              Configuration Setup                          ║"
+    echo "║ Press Enter to accept defaults in [brackets].             ║"
+    echo "╚════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    # Device
+    read -r -p "  Device ID [$DEVICE_ID]: " input_id
+    DEVICE_ID="${input_id:-$DEVICE_ID}"
+
+    # API
+    read -r -p "  Sensor API URL [https://growmate.bond/api/v2/sensors]: " input_sensor_url
+    SENSOR_URL="${input_sensor_url:-https://growmate.bond/api/v2/sensors}"
+
+    read -r -p "  Stream Register URL [https://growmate.bond/api/v2/stream/register]: " input_stream_url
+    STREAM_URL="${input_stream_url:-https://growmate.bond/api/v2/stream/register}"
+
+    # Onboarding
+    read -r -p "  AP mode password [growmate]: " input_ap_pass
+    AP_PASS="${input_ap_pass:-growmate}"
+
+    # Sensor interval
+    read -r -p "  Sensor reading interval in seconds [60]: " input_interval
+    SENSOR_INTERVAL="${input_interval:-60}"
+
+    # DHT22
+    read -r -p "  Enable DHT22 sensor? (y/n) [y]: " input_dht
+    if [[ "${input_dht:-y}" =~ ^[Yy] ]]; then
+        DHT22="true"
+        read -r -p "  DHT22 GPIO pin [4]: " input_dht_pin
+        DHT22_PIN="${input_dht_pin:-4}"
+    else
+        DHT22="false"
+        DHT22_PIN="4"
+    fi
+
+    # ADC
+    read -r -p "  ADC I2C address (hex, e.g. 0x48) [0x48]: " input_adc_addr
+    ADC_ADDR="${input_adc_addr:-0x48}"
+
+    read -r -p "  ADC gain [1]: " input_gain
+    ADC_GAIN="${input_gain:-1}"
+
+    # Relay pins
+    read -r -p "  Pump relay GPIO [10]: " input_pump
+    PUMP_PIN="${input_pump:-10}"
+
+    read -r -p "  Fertilizer relay GPIO [17]: " input_fert
+    FERT_PIN="${input_fert:-17}"
+
+    read -r -p "  Pesticide relay GPIO [27]: " input_pest
+    PEST_PIN="${input_pest:-27}"
+
+    # Limit switches
+    read -r -p "  Tank limit switch GPIO [20]: " input_tank
+    TANK_PIN="${input_tank:-20}"
+
+    read -r -p "  Drawer limit switch GPIO [21]: " input_drawer
+    DRAWER_PIN="${input_drawer:-21}"
+
+    # Camera
+    read -r -p "  Enable rpicam-vid camera? (y/n) [y]: " input_cam
+    if [[ "${input_cam:-y}" =~ ^[Yy] ]]; then
+        CAM_ENABLED="true"
+    else
+        CAM_ENABLED="false"
+    fi
+
+    # Logging
+    read -r -p "  Log level (DEBUG/INFO/WARNING/ERROR) [INFO]: " input_log
+    LOG_LEVEL="${input_log:-INFO}"
+
+    # Provisioned (fresh install = false)
+    PROVISIONED="false"
+
+    cat > "$CONFIG_FILE" <<YAMLEOF
+# GrowMate Pods V2 Configuration
+# Generated by install.sh on $(date)
+# See /home/pi/growmate/config/config.yaml.example for full documentation
+version: 9
+
+device:
+  id: "${DEVICE_ID}"
+
+api:
+  sensor_url: "${SENSOR_URL}"
+  stream_register_url: "${STREAM_URL}"
+  timeout_sensor: 30.0
+  timeout_stream_register: 10.0
+
+network:
+  provisioned: ${PROVISIONED}
+  wifi_ssid: ""
+  wifi_password: ""
+  wifi:
+    interface: "wlan0"
+    connect_timeout: 12
+    connect_retries: 4
+
+ap_mode:
+  ssid: "GrowMate-A1B2C3"
+  password: "${AP_PASS}"
+  channel: 1
+  ip_address: "192.168.4.1"
+  netmask: "255.255.255.0"
+  dhcp_range_start: "192.168.4.2"
+  dhcp_range_end: "192.168.4.20"
+  interface: "wlan0"
+
+onboarding:
+  host: "0.0.0.0"
+  port: 80
+
+intervals:
+  sensor_reading: ${SENSOR_INTERVAL}
+  failure_monitor: 30
+  camera_watchdog: 30
+  queue_cleanup: 3600
+  queue_vacuum: 604800
+  queue_stats: 300
+  health_check: 300
+
+queue:
+  enabled: true
+  db_path: "/var/lib/growmate/queue.db"
+  max_age_hours: 24
+  max_sensor_entries: 1440
+  cleanup_interval: 3600
+  max_retries: 5
+  vacuum_interval: 604800
+
+upload_processor:
+  max_concurrent: 3
+  delay: 0.5
+  idle_sleep: 2.0
+  batch_sleep: 0.1
+
+retry:
+  max_attempts: 6
+  initial_delay: 1.0
+  max_delay: 32.0
+  jitter: 0.25
+
+circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout: 60
+  success_threshold: 2
+
+sensors:
+  enable_dht22: ${DHT22}
+  dht22_pin: ${DHT22_PIN}
+  adc:
+    i2c_bus: 1
+    i2c_address: ${ADC_ADDR}
+    gain: ${ADC_GAIN}
+    samples: 8
+    sample_delay: 0.01
+    max_value: 65535
+  channels:
+    battery_current: 0
+    light: 1
+    water: 2
+    soil: 3
+  calibration:
+    soil:
+      min: 0
+      max: 65535
+    light:
+      min: 0
+      max: 65535
+    water:
+      min: 0
+      max: 65535
+  battery_current:
+    midpoint_voltage: 2.5
+    sensitivity: 0.185
+  limit_switches:
+    tank_gpio: ${TANK_PIN}
+    drawer_gpio: ${DRAWER_PIN}
+    pull_up_down: "PUD_UP"
+    debounce_ms: 50
+    debounce_samples: 5
+    debounce_sample_interval: 0.01
+  health:
+    failure_threshold: 3
+
+actuators:
+  pins:
+    pump: ${PUMP_PIN}
+    fertilizer: ${FERT_PIN}
+    pesticide: ${PEST_PIN}
+  active_high: true
+  initial_value: false
+  journal_size: 1000
+  journal_trim: 500
+
+camera:
+  enabled: ${CAM_ENABLED}
+  port: 8554
+  width: 640
+  height: 480
+  framerate: 15
+  bitrate: 1000000
+  profile: "baseline"
+  level: "3.1"
+  denoise: "cdn_off"
+  restart_delay: 0.5
+
+failure:
+  consecutive_threshold: 5
+
+health_monitor:
+  history_size: 100
+  camera_crash_threshold: 5
+
+stream_registration:
+  max_attempts: 10
+  base_delay: 1.0
+  max_delay: 60.0
+
+logging:
+  level: "${LOG_LEVEL}"
+  file: "/var/log/growmate/growmate.log"
+  format: "json"
+  max_bytes: 10485760
+  backup_count: 5
+  modules: {}
+
+features:
+  offline_queue: true
+  hot_reload: true
+  circuit_breaker: true
+YAMLEOF
+
+    chmod 644 "$CONFIG_FILE"
+    log_success "Configuration file created: $CONFIG_FILE"
+    log_info "Review and edit: sudo nano $CONFIG_FILE"
+}
+
 install_service() {
     log_info "Installing systemd service..."
-    
-    # Stop service if already running
+
     if systemctl is-active --quiet growmate; then
         log_info "Stopping existing service..."
         systemctl stop growmate
     fi
-    
-    # Copy service file
-    cp "$PROJECT_ROOT/systemd/growmate.service" "$SERVICE_FILE" || error_exit "Failed to copy service file"
-    
-    # Reload systemd daemon
-    systemctl daemon-reload || error_exit "Failed to reload systemd daemon"
-    
+
+    cp "$PROJECT_ROOT/systemd/growmate.service" "$SERVICE_FILE"
+
+    systemctl daemon-reload
     log_success "Systemd service installed"
 }
 
-# Enable and start service
 enable_service() {
     log_info "Enabling service to start on boot..."
-    systemctl enable growmate || error_exit "Failed to enable service"
+    systemctl enable growmate
     log_success "Service enabled"
-    
+
     log_info "Starting GrowMate service..."
-    systemctl start growmate || error_exit "Failed to start service"
-    log_success "Service started"
+    systemctl start growmate || log_warning "Service may need environment vars set; run: sudo systemctl edit growmate"
 }
 
-# Configure hostapd and dnsmasq
-configure_ap_mode() {
-    log_info "Configuring AP mode support..."
-    
-    # Stop services (they will be managed by the application)
-    systemctl stop hostapd 2>/dev/null || true
-    systemctl stop dnsmasq 2>/dev/null || true
-    
-    # Disable auto-start (application will start them when needed)
-    systemctl disable hostapd 2>/dev/null || true
-    systemctl disable dnsmasq 2>/dev/null || true
-    
-    # Unmask hostapd (it's masked by default on some systems)
-    systemctl unmask hostapd 2>/dev/null || true
-    
-    log_success "AP mode support configured"
-}
-
-# Set file permissions
 set_permissions() {
     log_info "Setting file permissions..."
-    
-    # Installation directory
-    chown -R root:root "$INSTALL_DIR"
+
+    chown -R pi:pi "$INSTALL_DIR"
     chmod -R 755 "$INSTALL_DIR"
-    
-    # Make Python files executable
-    chmod +x "$INSTALL_DIR/src/main.py"
-    
-    # Configuration directory
-    chown -R root:root "$CONFIG_DIR"
-    chmod 755 "$CONFIG_DIR"
-    
+    chmod +x "$INSTALL_DIR/start.sh"
+
     log_success "Permissions set"
 }
 
-# Display status and next steps
 display_status() {
     echo ""
     echo "╔════════════════════════════════════════════════════════════╗"
-    echo "║                                                            ║"
-    echo "║              Installation Complete!                        ║"
-    echo "║                                                            ║"
+    echo "║              Installation Complete!                       ║"
     echo "╚════════════════════════════════════════════════════════════╝"
     echo ""
-    
+
     log_info "Service Status:"
     systemctl status growmate --no-pager -l || true
-    
+
     echo ""
     log_info "Installation Summary:"
-    echo "  • Installation directory: $INSTALL_DIR"
-    echo "  • Configuration directory: $CONFIG_DIR"
-    echo "  • Service file: $SERVICE_FILE"
-    echo "  • Service status: $(systemctl is-active growmate)"
-    echo "  • Auto-start on boot: $(systemctl is-enabled growmate)"
+    echo "  Installation directory: $INSTALL_DIR"
+    echo "  Config file: $CONFIG_FILE"
+    echo "  Service file: $SERVICE_FILE"
+    echo "  Service status: $(systemctl is-active growmate)"
+    echo "  Auto-start on boot: $(systemctl is-enabled growmate)"
     echo ""
-    
+
     log_info "Next Steps:"
     echo ""
-    echo "  1. The GrowMate service is now running"
+    echo "  1. Set required environment variables:"
+    echo "     sudo systemctl edit growmate"
     echo ""
-    echo "  2. If this is the first boot (no configuration):"
-    echo "     • The device will enter AP mode automatically"
-    echo "     • Connect to WiFi network: GrowMate-XXXXXX"
-    echo "     • Password: growmate"
-    echo "     • Open browser: http://192.168.4.1"
-    echo "     • Configure WiFi, device ID, and API settings"
+    echo "     Add:"
+    echo "     [Service]"
+    echo "     Environment=DEVICE_API_KEY=<your-api-key>"
+    echo "     Environment=DEVICE_ID=<your-device-id>"
     echo ""
-    echo "  3. If already configured:"
-    echo "     • The device will connect to your WiFi"
-    echo "     • Start monitoring and uploading data"
+    echo "  2. Ensure Tailscale is connected:"
+    echo "     sudo tailscale up"
     echo ""
-    echo "  4. Useful Commands:"
-    echo "     • View logs:        journalctl -u growmate -f"
-    echo "     • Service status:   systemctl status growmate"
-    echo "     • Restart service:  systemctl restart growmate"
-    echo "     • Stop service:     systemctl stop growmate"
-    echo "     • Disable service:  systemctl disable growmate"
+    echo "  3. First-time setup (AP mode):"
+    echo "     The device will enter AP mode automatically on boot."
+    echo "     \u2022 Connect to WiFi network: $(grep 'ssid:' "$CONFIG_FILE" 2>/dev/null | head -1 | awk '{print $2}')"
+    echo "     \u2022 Password: $(grep 'password:' "$CONFIG_FILE" 2>/dev/null | head -1 | awk '{print $2}')"
+    echo "     \u2022 Channel: $(grep 'channel:' "$CONFIG_FILE" 2>/dev/null | head -1 | awk '{print $2}')"
+    echo "     \u2022 Open browser: http://192.168.4.1"
+    echo "     \u2022 Enter your WiFi credentials"
+    echo "     \u2022 WiFi is saved to $CONFIG_FILE (network.wifi_ssid / network.wifi_password)"
+    echo "     \u2022 The device connects and sets provisioned=true"
     echo ""
-    echo "  5. Configuration file: $CONFIG_DIR/config.yaml"
-    echo "     • Edit manually if needed"
-    echo "     • Restart service after changes"
+    echo "  4. Useful commands:"
+    echo "     View logs:        journalctl -u growmate -f"
+    echo "     Service status:   systemctl status growmate"
+    echo "     Restart service:  systemctl restart growmate"
+    echo "     Stop service:     systemctl stop growmate"
+    echo "     Camera status:    ps aux | grep rpicam-vid"
+    echo "     Tailscale IP:     tailscale ip -4"
+    echo "     Edit config:      sudo nano $CONFIG_FILE"
     echo ""
-    
-    # Check if reboot is needed
-    if [ ! -e /dev/i2c-1 ] || ! lsmod | grep -q i2c_bcm2835; then
-        log_warning "A reboot is recommended to ensure I2C and Camera are fully enabled"
+
+    if ! lsmod | grep -q i2c_bcm2835; then
+        log_warning "A reboot is recommended to fully enable I2C"
         echo ""
         echo "  ${YELLOW}Reboot now? (y/n)${NC}"
         read -r response
@@ -363,40 +546,36 @@ display_status() {
     fi
 }
 
-# Main installation flow
 main() {
     print_banner
-    
     log_info "Starting installation..."
     echo ""
-    
-    # Pre-installation checks
+
     check_root
     check_platform
-    
-    # System setup
+
     update_system
     install_system_deps
     enable_i2c
-    enable_camera
     configure_ap_mode
-    
-    # Application installation
+
     create_install_dir
     copy_files
     install_python_deps
-    create_config_dir
+
+    create_config
+
     set_permissions
-    
-    # Service setup
+
     install_service
+
+    install_tailscale
+
     enable_service
-    
-    # Completion
+
     display_status
-    
+
     log_success "Installation completed successfully!"
 }
 
-# Run main installation
 main "$@"
