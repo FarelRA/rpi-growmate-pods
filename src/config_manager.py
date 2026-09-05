@@ -368,6 +368,7 @@ class ConfigManager:
                 'level': '3.1',
                 'denoise': 'cdn_off',
                 'restart_delay': 0.5,
+                'log_path': '/var/log/growmate/rpicam-vid.log',
             },
             'failure': {
                 'consecutive_threshold': 5,

@@ -469,7 +469,7 @@ class GrowMateApp:
                 stats = await self.queue.async_get_queue_stats()
 
                 sensor_queue = stats.get('sensor_queue', {})
-                sensor_pending = sensor_queue.get('pending', 0)
+                sensor_pending = sensor_queue.get('pending') or 0
 
                 if sensor_pending > 0:
                     logger.info(

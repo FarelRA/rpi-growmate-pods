@@ -164,7 +164,7 @@ class HealthMonitor:
         if isinstance(queue_metrics, dict):
             sensor_queue = queue_metrics.get('sensor_queue', {})
             if isinstance(sensor_queue, dict):
-                sensor_depth = sensor_queue.get('pending', 0)
+                sensor_depth = sensor_queue.get('pending') or 0
 
                 max_sensor = 6000
                 if sensor_depth > max_sensor * 0.8:
@@ -172,8 +172,8 @@ class HealthMonitor:
 
         upload_metrics = metrics.get('upload_processor', {})
         if isinstance(upload_metrics, dict):
-            total = upload_metrics.get('total_processed', 0)
-            failed = upload_metrics.get('sensor_uploads_failed', 0)
+            total = upload_metrics.get('total_processed') or 0
+            failed = upload_metrics.get('sensor_uploads_failed') or 0
 
             if total > 10:
                 failure_rate = (failed / total) * 100
@@ -182,7 +182,7 @@ class HealthMonitor:
 
         camera_metrics = metrics.get('camera', {})
         if isinstance(camera_metrics, dict):
-            recent = camera_metrics.get('recent_crashes_1h', 0)
+            recent = camera_metrics.get('recent_crashes_1h') or 0
             threshold = getattr(self, '_camera_crash_threshold', 5)
             if recent >= threshold:
                 issues.append(

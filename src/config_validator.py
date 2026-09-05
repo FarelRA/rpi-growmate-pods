@@ -180,6 +180,7 @@ class CameraConfig(BaseModel):
     level: str = Field("3.1")
     denoise: str = Field("cdn_off")
     restart_delay: float = Field(0.5, ge=0.1, le=10.0)
+    log_path: str = Field("/var/log/growmate/rpicam-vid.log")
 
 
 class FailureConfig(BaseModel):

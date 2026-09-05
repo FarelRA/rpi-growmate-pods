@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import subprocess
 import time
@@ -20,6 +21,7 @@ CAMERA_DEFAULTS = {
     "level": "3.1",
     "denoise": "cdn_off",
     "restart_delay": 0.5,
+    "log_path": "/var/log/growmate/rpicam-vid.log",
 }
 
 
@@ -37,6 +39,7 @@ class CameraService:
         level = cfg.get("level", CAMERA_DEFAULTS["level"])
         denoise = cfg.get("denoise", CAMERA_DEFAULTS["denoise"])
         self._restart_delay = cfg.get("restart_delay", CAMERA_DEFAULTS["restart_delay"])
+        self._log_path = cfg.get("log_path", CAMERA_DEFAULTS["log_path"])
 
         self._port = port
 
@@ -58,6 +61,14 @@ class CameraService:
         self.last_crash_time: Optional[float] = None
         self.crash_timestamps: List[float] = []
         self._monitor_task: Optional[asyncio.Task] = None
+        self._log_handle: Optional[io.TextIOWrapper] = None
+
+    def _open_log(self) -> Optional[io.TextIOWrapper]:
+        try:
+            return open(self._log_path, "a")
+        except Exception:
+            logger.warning(f"Could not open camera log: {self._log_path}")
+            return None
 
     def start_stream(self) -> bool:
         if not self._enabled:
@@ -66,10 +77,12 @@ class CameraService:
 
         try:
             logger.info(f"Starting rpicam-vid stream (tcp://0.0.0.0:{self._port})...")
+            log_handle = self._open_log()
+            self._log_handle = log_handle
             self.process = subprocess.Popen(
                 self._cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=log_handle or subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
             )
             self.running = True
             logger.info(f"rpicam-vid started (PID {self.process.pid})")
@@ -107,6 +120,14 @@ class CameraService:
             pass
         return None
 
+    def _close_log(self):
+        if self._log_handle is not None:
+            try:
+                self._log_handle.close()
+            except Exception:
+                pass
+            self._log_handle = None
+
     def stop_stream(self):
         self._cancel_monitoring()
 
@@ -128,6 +149,7 @@ class CameraService:
 
         self.running = False
         self.process = None
+        self._close_log()
 
     def _wait_for_exit(self, pid: int, timeout: float = 5):
         deadline = time.time() + timeout
@@ -215,4 +237,5 @@ class CameraService:
 
     def cleanup(self):
         logger.info("Camera service cleanup")
+        self._close_log()
         self.stop_stream()
